@@ -4,7 +4,9 @@ This module handles text-to-speech generation using ChatTTS,
 with GPU memory management and batch processing for optimal performance.
 """
 
+import io
 import os
+import sys
 from typing import Optional, Tuple, List
 
 import numpy as np
@@ -362,46 +364,25 @@ def generate_audio_batch(
     # Build result array with None for all positions
     audio_arrays = [None] * len(texts)
 
-    # Try batch inference first
-    wavs = None
-    batch_success = False
-    try:
-        wavs = chat.infer(
-            valid_texts,
-            skip_refine_text=True,
-            params_infer_code=params_infer_code,
-            use_decoder=True,
-            do_text_normalization=False,
-            do_homophone_replacement=False,
-        )
-        # Check if batch returned valid results for all texts
-        if wavs is not None and len(wavs) == len(valid_texts):
-            batch_success = True
-    except Exception as e:
-        if not quiet:
-            print_info(f"Batch inference failed ({e}), falling back to sequential...")
-
-    # If batch succeeded, process results
-    if batch_success:
-        for idx, wav in zip(valid_indices, wavs):
-            if wav is not None and len(wav) > 0:
-                audio_arrays[idx] = _convert_wav_to_int16(wav)
-        return audio_arrays
-
-    # Fallback: process one by one, skipping failures silently
-    if not quiet:
-        print_info("Processing sentences one by one...")
-
+    # Process one by one for maximum reliability
+    # Batch processing causes "unexpected end at index" errors on some systems
     for idx, text in zip(valid_indices, valid_texts):
         try:
-            result = chat.infer(
-                [text],
-                skip_refine_text=True,
-                params_infer_code=params_infer_code,
-                use_decoder=True,
-                do_text_normalization=False,
-                do_homophone_replacement=False,
-            )
+            # Suppress ChatTTS stderr output during inference
+            old_stderr = sys.stderr
+            sys.stderr = io.StringIO()
+            try:
+                result = chat.infer(
+                    [text],
+                    skip_refine_text=True,
+                    params_infer_code=params_infer_code,
+                    use_decoder=True,
+                    do_text_normalization=False,
+                    do_homophone_replacement=False,
+                )
+            finally:
+                sys.stderr = old_stderr
+
             if result and len(result) > 0 and result[0] is not None and len(result[0]) > 0:
                 audio_arrays[idx] = _convert_wav_to_int16(result[0])
         except Exception:
