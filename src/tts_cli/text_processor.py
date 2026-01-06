@@ -6,6 +6,7 @@ so intelligent splitting is critical.
 """
 
 import re
+import unicodedata
 from typing import List
 
 # Default maximum length for each chunk (characters)
@@ -39,6 +40,10 @@ def normalize_text_for_tts(text: str) -> str:
     Returns:
         Normalized text safe for ChatTTS
     """
+    # Step 0: Unicode NFKC normalization to convert lookalike characters
+    # This converts fullwidth ASCII, compatibility chars, etc. to standard forms
+    text = unicodedata.normalize('NFKC', text)
+
     # Step 1: Convert numbers to words
     num_to_word = {
         '0': 'zero', '1': 'one', '2': 'two', '3': 'three', '4': 'four',
@@ -123,8 +128,8 @@ def validate_text_for_chattts(text: str) -> tuple:
             continue  # a-z, A-Z
         elif '\u4e00' <= char <= '\u9fff':
             continue  # Chinese
-        elif char in '。，！？ ':
-            continue  # Allowed punctuation and space
+        elif char in '。，！ ':
+            continue  # Allowed punctuation and space (no ? - not supported)
         else:
             invalid_chars.add(char)
 
