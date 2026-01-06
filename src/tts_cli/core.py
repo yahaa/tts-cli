@@ -251,32 +251,49 @@ def _generate_audio_multi_chunk(
             else:
                 print_info(f"Chunk {i}: {len(chunk)} chars [OK]")
 
-    # Process all chunks in batches
-    chunk_audios = [None] * num_chunks
-    num_batches = (num_chunks + batch_size - 1) // batch_size
-
-    for batch_idx in range(num_batches):
-        start_idx = batch_idx * batch_size
-        end_idx = min(start_idx + batch_size, num_chunks)
-        batch_chunks = text_chunks[start_idx:end_idx]
-
+    # Process chunks with parallel workers
+    # When num_workers > 1, process all chunks together for parallelism
+    # When num_workers = 1, process in batches based on batch_size
+    if config.num_workers > 1:
+        # Parallel mode: process all chunks together
         if not config.quiet:
-            print_info(f"Processing batch {batch_idx + 1}/{num_batches} (chunks {start_idx + 1}-{end_idx})...")
+            print_info(f"Processing {num_chunks} chunks with {config.num_workers} parallel workers...")
 
-        # Batch inference with parallel workers
-        batch_audios = generate_audio_batch(
+        chunk_audios = generate_audio_batch(
             chat=chat,
-            texts=batch_chunks,
+            texts=text_chunks,
             speed=config.speed,
             spk=spk,
             break_level=config.break_level,
             quiet=config.quiet,
             num_workers=config.num_workers
         )
+    else:
+        # Sequential mode: process in batches
+        chunk_audios = [None] * num_chunks
+        num_batches = (num_chunks + batch_size - 1) // batch_size
 
-        # Store results
-        for i, audio in enumerate(batch_audios):
-            chunk_audios[start_idx + i] = audio
+        for batch_idx in range(num_batches):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, num_chunks)
+            batch_chunks = text_chunks[start_idx:end_idx]
+
+            if not config.quiet:
+                print_info(f"Processing batch {batch_idx + 1}/{num_batches} (chunks {start_idx + 1}-{end_idx})...")
+
+            batch_audios = generate_audio_batch(
+                chat=chat,
+                texts=batch_chunks,
+                speed=config.speed,
+                spk=spk,
+                break_level=config.break_level,
+                quiet=config.quiet,
+                num_workers=1
+            )
+
+            # Store results
+            for i, audio in enumerate(batch_audios):
+                chunk_audios[start_idx + i] = audio
 
     # Merge chunks with paragraph pauses (1.0s between chunks)
     if not config.quiet:
