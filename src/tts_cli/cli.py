@@ -101,6 +101,12 @@ Examples:
         help="Auto-split text longer than this into chunks (default: 500)",
     )
     parser.add_argument(
+        "--max-batch",
+        type=int,
+        default=1,
+        help="Max chunks to process in parallel (default: 1, increase for faster but less stable)",
+    )
+    parser.add_argument(
         "--no-normalize",
         action="store_true",
         help="Disable text normalization (normalization is enabled by default)",
@@ -155,6 +161,7 @@ def main():
             speaker=args.speaker,
             save_speaker=args.save_speaker,
             max_length=args.max_length,
+            max_batch=args.max_batch,
             no_normalize=args.no_normalize,
             whisper_model=args.whisper_model,
             skip_subtitles=args.skip_subtitles,

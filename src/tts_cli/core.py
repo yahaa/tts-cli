@@ -40,6 +40,7 @@ class TTSConfig:
         speaker: Optional[str] = None,
         save_speaker: Optional[str] = None,
         max_length: Optional[int] = None,
+        max_batch: int = 1,
         no_normalize: bool = False,
         whisper_model: str = "base",
         skip_subtitles: bool = False,
@@ -56,6 +57,7 @@ class TTSConfig:
         self.speaker = speaker
         self.save_speaker = save_speaker
         self.max_length = max_length
+        self.max_batch = max_batch
         self.no_normalize = no_normalize
         self.whisper_model = whisper_model
         self.skip_subtitles = skip_subtitles
@@ -217,7 +219,8 @@ def _generate_audio_multi_chunk(
     # Calculate optimal batch size based on GPU memory
     batch_size = calculate_optimal_batch_size(
         num_chunks=num_chunks,
-        chunk_chars=avg_chunk_chars
+        chunk_chars=avg_chunk_chars,
+        max_batch=config.max_batch
     )
 
     if not config.quiet:
