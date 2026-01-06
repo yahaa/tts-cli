@@ -364,30 +364,50 @@ def generate_audio_batch(
     # Build result array with None for all positions
     audio_arrays = [None] * len(texts)
 
-    # Process one by one for maximum reliability
-    # Batch processing causes "unexpected end at index" errors on some systems
-    for idx, text in zip(valid_indices, valid_texts):
-        try:
-            # Suppress ChatTTS stderr output during inference
-            old_stderr = sys.stderr
-            sys.stderr = io.StringIO()
-            try:
-                result = chat.infer(
-                    [text],
-                    skip_refine_text=True,
-                    params_infer_code=params_infer_code,
-                    use_decoder=True,
-                    do_text_normalization=False,
-                    do_homophone_replacement=False,
-                )
-            finally:
-                sys.stderr = old_stderr
+    # Suppress ChatTTS stderr to hide "unexpected end at index" warnings
+    old_stderr = sys.stderr
+    sys.stderr = io.StringIO()
 
-            if result and len(result) > 0 and result[0] is not None and len(result[0]) > 0:
-                audio_arrays[idx] = _convert_wav_to_int16(result[0])
+    try:
+        # Try batch inference first (faster on GPU)
+        batch_success = False
+        try:
+            wavs = chat.infer(
+                valid_texts,
+                skip_refine_text=True,
+                params_infer_code=params_infer_code,
+                use_decoder=True,
+                do_text_normalization=False,
+                do_homophone_replacement=False,
+            )
+            if wavs is not None and len(wavs) == len(valid_texts):
+                batch_success = True
+                for idx, wav in zip(valid_indices, wavs):
+                    if wav is not None and len(wav) > 0:
+                        audio_arrays[idx] = _convert_wav_to_int16(wav)
         except Exception:
-            # Skip failed sentences silently
-            pass
+            batch_success = False
+
+        # Fallback: process failed items one by one
+        if not batch_success:
+            for idx, text in zip(valid_indices, valid_texts):
+                if audio_arrays[idx] is not None:
+                    continue  # Already succeeded in batch
+                try:
+                    result = chat.infer(
+                        [text],
+                        skip_refine_text=True,
+                        params_infer_code=params_infer_code,
+                        use_decoder=True,
+                        do_text_normalization=False,
+                        do_homophone_replacement=False,
+                    )
+                    if result and len(result) > 0 and result[0] is not None and len(result[0]) > 0:
+                        audio_arrays[idx] = _convert_wav_to_int16(result[0])
+                except Exception:
+                    pass  # Skip failed sentences
+    finally:
+        sys.stderr = old_stderr
 
     return audio_arrays
 
