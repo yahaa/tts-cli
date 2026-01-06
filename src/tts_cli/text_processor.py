@@ -131,9 +131,13 @@ def normalize_text_for_tts(text: str) -> str:
     for old, new in replacements.items():
         text = text.replace(old, new)
 
+    # Step 2.5: Convert problematic punctuation for ChatTTS compatibility
+    # ChatTTS reports "found invalid characters: {'?'}" for half-width ?
+    text = text.replace('?', '？')
+
     # Step 3: Final filter - only keep allowed characters
-    # Allowed: a-z, A-Z, Chinese chars, space, and . , ! ? '
-    allowed_punctuation = set('.,!?\' 。，！？、')
+    # Allowed: a-z, A-Z, Chinese chars, space, basic punctuation
+    allowed_punctuation = set('.,!\' 。，！？、')
 
     result = []
     for char in text:
