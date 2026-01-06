@@ -266,8 +266,9 @@ def split_paragraph_to_sentences(text: str) -> List[str]:
     return [s.strip() for s in sentences if s.strip()]
 
 
-# Separator between sentences (space is sufficient as sentences have their own punctuation)
-CHATTTS_PAUSE_MARKER = ' '
+# ChatTTS pause marker - [uv_break] creates natural pauses between sentences
+# Works with skip_refine_text=True per official documentation
+CHATTTS_PAUSE_MARKER = '[uv_break]'
 
 
 def merge_sentences_to_chunks(

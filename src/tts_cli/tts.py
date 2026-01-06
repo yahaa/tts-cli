@@ -378,11 +378,17 @@ def generate_audio_batch(
             for idx, wav in zip(valid_indices, wavs):
                 if wav is not None and len(wav) > 0:
                     audio_arrays[idx] = _convert_wav_to_int16(wav)
-    except Exception:
+                elif not quiet:
+                    print_info(f"Warning: Chunk {idx} returned empty audio")
+    except Exception as e:
         batch_success = False
+        if not quiet:
+            print_info(f"Batch inference failed: {e}")
 
     # Fallback: process failed items one by one
     if not batch_success:
+        if not quiet:
+            print_info("Falling back to sequential processing...")
         for idx, text in zip(valid_indices, valid_texts):
             if audio_arrays[idx] is not None:
                 continue  # Already succeeded in batch
@@ -397,8 +403,16 @@ def generate_audio_batch(
                 )
                 if result and len(result) > 0 and result[0] is not None and len(result[0]) > 0:
                     audio_arrays[idx] = _convert_wav_to_int16(result[0])
-            except Exception:
-                pass  # Skip failed chunks
+                elif not quiet:
+                    print_info(f"Warning: Chunk {idx} failed to generate audio")
+            except Exception as e:
+                if not quiet:
+                    print_info(f"Warning: Chunk {idx} error: {e}")
+
+    # Report success rate
+    success_count = sum(1 for a in audio_arrays if a is not None)
+    if not quiet and success_count < len(texts):
+        print_info(f"Generated {success_count}/{len(texts)} chunks successfully")
 
     return audio_arrays
 
