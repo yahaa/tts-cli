@@ -66,38 +66,66 @@ def normalize_text_for_tts(text: str) -> str:
 
     # Step 2: Replace special punctuation with spaces or supported alternatives
     replacements = {
+        # Dashes
         '—': ' ',    # em-dash
         '–': ' ',    # en-dash
         '-': ' ',    # hyphen
-        ':': ' ',    # colon
-        ';': ' ',    # semicolon
+        '―': ' ',    # horizontal bar
+        # Colons/semicolons -> comma (preserves natural pause)
+        ':': ',',
+        ';': ',',
+        '：': '，',   # full-width
+        '；': '，',
+        # Quotes (remove all)
         '"': '',     # curly quote
-        '"': '',     # curly quote
+        '"': '',
         ''': '',     # curly apostrophe
-        ''': '',     # curly apostrophe
-        '(': ' ',    # parentheses
+        ''': '',
+        '「': '',    # CJK quotes
+        '」': '',
+        '『': '',
+        '』': '',
+        '«': '',     # guillemets
+        '»': '',
+        # Brackets/parentheses
+        '(': ' ',
         ')': ' ',
-        '[': ' ',    # brackets
+        '（': ' ',   # full-width
+        '）': ' ',
+        '[': ' ',
         ']': ' ',
-        '{': ' ',    # braces
+        '【': ' ',   # CJK brackets
+        '】': ' ',
+        '{': ' ',
         '}': ' ',
-        '/': ' ',    # slash
-        '\\': ' ',   # backslash
-        '@': ' at ', # at symbol
-        '#': ' ',    # hash
-        '$': ' ',    # dollar
+        # Slashes
+        '/': ' ',
+        '\\': ' ',
+        '／': ' ',   # full-width
+        # Symbols
+        '@': ' at ',
+        '#': ' ',
+        '$': ' ',
+        '￥': ' ',   # yen
         '%': ' percent ',
         '&': ' and ',
-        '*': ' ',    # asterisk
+        '*': ' ',
         '+': ' plus ',
         '=': ' equals ',
-        '<': ' ',    # angle brackets
+        '<': ' ',
         '>': ' ',
-        '|': ' ',    # pipe
-        '~': ' ',    # tilde
-        '`': '',     # backtick
-        '^': ' ',    # caret
-        '_': ' ',    # underscore
+        '|': ' ',
+        '~': ' ',
+        '`': '',
+        '^': ' ',
+        '_': ' ',
+        '·': ' ',    # middle dot
+        '•': ' ',    # bullet
+        '…': '.',    # ellipsis -> period
+        '\u3000': ' ',  # ideographic space
+        '\xa0': ' ',    # non-breaking space
+        '\t': ' ',      # tab
+        '\r': ' ',      # carriage return
     }
 
     for old, new in replacements.items():

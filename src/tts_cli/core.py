@@ -205,6 +205,8 @@ def _generate_audio_multi_chunk(
     num_paragraphs = len(text_chunks)
 
     # Split each paragraph into sentences
+    # Minimum 5 chars needed for reliable ChatTTS audio generation
+    MIN_SENTENCE_LENGTH = 5
     all_sentences = []
     paragraph_boundaries = [0]
 
@@ -212,11 +214,11 @@ def _generate_audio_multi_chunk(
         sentences = split_paragraph_to_sentences(para)
         if not sentences:
             sentences = [para]
-        # Filter out sentences that are too short (< 2 chars) - they cause ChatTTS errors
-        sentences = [s for s in sentences if len(s.strip()) >= 2]
-        if not sentences:
-            # If all sentences were filtered out, use the paragraph as-is
-            sentences = [para] if len(para.strip()) >= 2 else []
+        # Filter out sentences that are too short - they cause ChatTTS errors
+        sentences = [s.strip() for s in sentences if len(s.strip()) >= MIN_SENTENCE_LENGTH]
+        if not sentences and para.strip():
+            # If all sentences filtered out but paragraph has content, use it as-is
+            sentences = [para.strip()] if len(para.strip()) >= MIN_SENTENCE_LENGTH else []
         all_sentences.extend(sentences)
         paragraph_boundaries.append(len(all_sentences))
 
