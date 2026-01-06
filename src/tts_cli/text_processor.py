@@ -1,0 +1,277 @@
+"""Text processing utilities for tts-cli.
+
+This module handles text splitting and normalization for ChatTTS.
+Key consideration: ChatTTS produces lower quality audio for long texts,
+so intelligent splitting is critical.
+"""
+
+import re
+from typing import List
+
+# Default maximum length for each chunk (characters)
+DEFAULT_MAX_LENGTH = 800
+
+# Minimum length for the last chunk to avoid quality issues
+DEFAULT_MIN_TAIL_LENGTH = 300
+
+# Sentence ending punctuation patterns
+SENTENCE_END_PATTERN_EN = r'[.!?]'
+SENTENCE_END_PATTERN_ZH = r'[。！？]'
+SENTENCE_END_PATTERN = r'[.!?。！？]'
+
+
+def normalize_text_for_tts(text: str) -> str:
+    """
+    Normalize text to avoid ChatTTS invalid character warnings.
+
+    ChatTTS only supports a limited character set:
+    - English letters (a-z, A-Z)
+    - Chinese characters (U+4E00-U+9FFF)
+    - Basic punctuation (. , ! ? ' space)
+    - Chinese punctuation (。，！？)
+
+    All other characters are converted or removed.
+
+    Args:
+        text: Input text
+
+    Returns:
+        Normalized text safe for ChatTTS
+    """
+    # Step 1: Convert numbers to words (before removing digits)
+    num_to_word = {
+        '0': 'zero', '1': 'one', '2': 'two', '3': 'three', '4': 'four',
+        '5': 'five', '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine'
+    }
+
+    # Replace common year patterns
+    text = text.replace('2026', 'twenty twenty six')
+    text = text.replace('2025', 'twenty twenty five')
+    text = text.replace('2024', 'twenty twenty four')
+    text = text.replace('2023', 'twenty twenty three')
+
+    # Replace multi-digit numbers (up to 20)
+    def replace_number(match):
+        num = int(match.group(0))
+        if num <= 20:
+            words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven',
+                    'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen',
+                    'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen',
+                    'nineteen', 'twenty']
+            return words[num]
+        # For larger numbers, spell out each digit
+        return ' '.join(num_to_word[d] for d in str(num))
+
+    text = re.sub(r'\b\d+\b', replace_number, text)
+
+    # Step 2: Replace special punctuation with spaces or supported alternatives
+    replacements = {
+        '—': ' ',    # em-dash
+        '–': ' ',    # en-dash
+        '-': ' ',    # hyphen
+        ':': ' ',    # colon
+        ';': ' ',    # semicolon
+        '"': '',     # curly quote
+        '"': '',     # curly quote
+        ''': '',     # curly apostrophe
+        ''': '',     # curly apostrophe
+        '(': ' ',    # parentheses
+        ')': ' ',
+        '[': ' ',    # brackets
+        ']': ' ',
+        '{': ' ',    # braces
+        '}': ' ',
+        '/': ' ',    # slash
+        '\\': ' ',   # backslash
+        '@': ' at ', # at symbol
+        '#': ' ',    # hash
+        '$': ' ',    # dollar
+        '%': ' percent ',
+        '&': ' and ',
+        '*': ' ',    # asterisk
+        '+': ' plus ',
+        '=': ' equals ',
+        '<': ' ',    # angle brackets
+        '>': ' ',
+        '|': ' ',    # pipe
+        '~': ' ',    # tilde
+        '`': '',     # backtick
+        '^': ' ',    # caret
+        '_': ' ',    # underscore
+    }
+
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+
+    # Step 3: Final filter - only keep allowed characters
+    # Allowed: a-z, A-Z, Chinese chars, space, and . , ! ? '
+    allowed_punctuation = set('.,!?\' 。，！？、')
+
+    result = []
+    for char in text:
+        if char.isalpha():  # English and other alphabets
+            result.append(char)
+        elif '\u4e00' <= char <= '\u9fff':  # Chinese characters
+            result.append(char)
+        elif char in allowed_punctuation:
+            result.append(char)
+        else:
+            result.append(' ')  # Replace unknown chars with space
+
+    text = ''.join(result)
+
+    # Step 4: Clean up multiple spaces
+    text = re.sub(r'\s+', ' ', text)
+
+    return text.strip()
+
+
+def split_text_intelligently(
+    text: str,
+    max_length: int = DEFAULT_MAX_LENGTH,
+    min_tail_length: int = DEFAULT_MIN_TAIL_LENGTH
+) -> List[str]:
+    """
+    Split long text into smaller chunks by paragraphs and sentences.
+
+    Strategy:
+    1. First split by paragraphs (one or more newlines)
+    2. If a paragraph exceeds max_length, split at sentence endings
+    3. If the last chunk is too short, merge with previous chunk
+
+    IMPORTANT: ChatTTS produces lower quality audio for long texts.
+    Default max_length=800 is recommended for best quality.
+
+    Args:
+        text: Input text to split
+        max_length: Maximum length of each chunk (default: 800)
+        min_tail_length: Minimum length for the last chunk (default: 300)
+
+    Returns:
+        List of text chunks, each <= max_length characters
+    """
+    # If text is short enough, return as is
+    if len(text) <= max_length:
+        return [text]
+
+    # Step 1: Split by paragraphs (one or more newlines)
+    paragraphs = re.split(r'\n+', text)
+
+    chunks = []
+
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+
+        # If paragraph is short enough, add directly
+        if len(para) <= max_length:
+            chunks.append(para)
+            continue
+
+        # Step 2: Paragraph too long, split at sentence endings
+        remaining = para
+        while len(remaining) > max_length:
+            # Find the last sentence ending within max_length
+            search_text = remaining[:max_length]
+            last_end = _find_last_sentence_end(search_text)
+
+            if last_end > 0:
+                # Split at the last sentence ending
+                chunk = remaining[:last_end + 1].strip()
+                remaining = remaining[last_end + 1:].strip()
+                chunks.append(chunk)
+            else:
+                # No sentence ending found, force split at max_length
+                chunks.append(remaining[:max_length].strip())
+                remaining = remaining[max_length:].strip()
+
+        # Add remaining text
+        if remaining:
+            chunks.append(remaining)
+
+    # Step 3: Merge short tail chunk with previous chunk
+    if len(chunks) > 1 and len(chunks[-1]) < min_tail_length:
+        last_chunk = chunks.pop()
+        chunks[-1] = chunks[-1] + " " + last_chunk
+
+    return chunks
+
+
+def _find_last_sentence_end(text: str) -> int:
+    """
+    Find the position of the last sentence ending punctuation.
+
+    Supports both English (. ! ?) and Chinese (。！？) punctuation.
+
+    Args:
+        text: Text to search
+
+    Returns:
+        Position of last sentence ending, or -1 if not found
+    """
+    # Find all sentence ending positions
+    positions = []
+    for match in re.finditer(SENTENCE_END_PATTERN, text):
+        positions.append(match.end() - 1)
+
+    return positions[-1] if positions else -1
+
+
+def split_paragraph_to_sentences(text: str) -> List[str]:
+    """
+    Split a paragraph into sentences.
+
+    Supports both English and Chinese sentence endings.
+
+    Args:
+        text: Input paragraph text
+
+    Returns:
+        List of sentences
+    """
+    # Split at sentence endings, handling both:
+    # 1. Punctuation followed by whitespace (English style)
+    # 2. Chinese punctuation (may not have following whitespace)
+    # Using lookbehind to keep the punctuation with the sentence
+    sentences = re.split(r'(?<=[.!?])\s+|(?<=[。！？])', text)
+    return [s.strip() for s in sentences if s.strip()]
+
+
+def estimate_text_length(text: str) -> int:
+    """
+    Estimate the "effective" length of text for TTS.
+
+    Chinese characters are typically shorter in audio duration than English words,
+    but for simplicity we use character count.
+
+    Args:
+        text: Input text
+
+    Returns:
+        Estimated length
+    """
+    return len(text)
+
+
+def detect_language(text: str) -> str:
+    """
+    Detect whether text is primarily Chinese or English.
+
+    Args:
+        text: Input text
+
+    Returns:
+        'zh' for Chinese, 'en' for English
+    """
+    # Count Chinese characters
+    chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', text))
+    total_chars = len(text.replace(' ', ''))
+
+    if total_chars == 0:
+        return 'en'
+
+    # If more than 30% Chinese characters, consider it Chinese
+    if chinese_chars / total_chars > 0.3:
+        return 'zh'
+    return 'en'

@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tts-cli"
+version = "0.1.0"
+description = "A local offline text-to-speech CLI tool with subtitle generation"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "yahaa"}
+]
+keywords = ["tts", "text-to-speech", "ChatTTS", "subtitle", "srt"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+dependencies = [
+    "ChatTTS",
+    "torch",
+    "numpy",
+    "scipy",
+    "transformers<4.54",  # ChatTTS has issues with transformers>=4.54
+]
+
+[project.optional-dependencies]
+subtitle = ["openai-whisper"]
+fast = ["numba"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+all = [
+    "openai-whisper",
+    "numba",
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[project.scripts]
+tts-cli = "tts_cli.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/yahaa/tts-cli"
+Repository = "https://github.com/yahaa/tts-cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["src/tts_cli"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
