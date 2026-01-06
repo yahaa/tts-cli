@@ -314,6 +314,7 @@ def generate_audio_batch(
     Generate audio for multiple text chunks in a batch.
 
     This leverages GPU parallelism for faster generation.
+    Handles failures gracefully by falling back to sequential processing.
 
     Args:
         chat: Initialized ChatTTS Chat instance
@@ -324,11 +325,29 @@ def generate_audio_batch(
         quiet: Suppress progress messages
 
     Returns:
-        List of audio arrays (int16)
+        List of audio arrays (int16), None for failed items
     """
     import ChatTTS as CT
 
+    # Minimum text length for valid audio generation
+    MIN_TEXT_LENGTH = 5
+
+    # Filter out empty or too-short texts, track original indices
+    valid_indices = []
+    valid_texts = []
+    for i, text in enumerate(texts):
+        if text and len(text.strip()) >= MIN_TEXT_LENGTH:
+            valid_indices.append(i)
+            valid_texts.append(text.strip())
+
+    # Initialize result array with None for all positions
+    audio_arrays = [None] * len(texts)
+
+    if not valid_texts:
+        return audio_arrays
+
     # Audio generation parameters
+    # Note: ensure_non_empty=False to avoid "unexpected end at index" errors
     params_infer_code = CT.Chat.InferCodeParams(
         spk_emb=spk,
         prompt=f"[speed_{speed}]",
@@ -337,30 +356,65 @@ def generate_audio_batch(
         top_K=20,
         repetition_penalty=1.05,
         max_new_token=2048,
-        ensure_non_empty=True,
+        ensure_non_empty=False,
     )
 
-    # Batch inference
-    # Note: skip_refine_text=True avoids "narrow(): length must be non-negative" errors
-    wavs = chat.infer(
-        texts,
-        skip_refine_text=True,
-        params_infer_code=params_infer_code,
-        use_decoder=True,
-        do_text_normalization=False,
-        do_homophone_replacement=False,
-    )
+    # Try batch inference first
+    wavs = None
+    try:
+        wavs = chat.infer(
+            valid_texts,
+            skip_refine_text=True,
+            params_infer_code=params_infer_code,
+            use_decoder=True,
+            do_text_normalization=False,
+            do_homophone_replacement=False,
+        )
+    except Exception as e:
+        if not quiet:
+            print_info(f"Batch inference failed ({e}), falling back to sequential...")
 
-    # Convert to int16 with blended normalization
-    audio_arrays = []
-    for wav in wavs:
-        if wav is not None and len(wav) > 0:
-            normalized = float_to_int16(wav)
-            original = (wav * 32767).astype(np.int16)
-            # Blend normalized and original for balanced audio
-            audio_data = (normalized * 0.7 + original * 0.3).astype(np.int16)
-            audio_arrays.append(audio_data)
-        else:
-            audio_arrays.append(None)
+    # If batch succeeded, process results
+    if wavs is not None and len(wavs) == len(valid_texts):
+        for idx, wav in zip(valid_indices, wavs):
+            if wav is not None and len(wav) > 0:
+                audio_arrays[idx] = _convert_wav_to_int16(wav)
+        return audio_arrays
+
+    # Fallback: process one by one, skipping failures
+    if not quiet:
+        print_info("Processing sentences one by one...")
+
+    for idx, text in zip(valid_indices, valid_texts):
+        try:
+            result = chat.infer(
+                [text],
+                skip_refine_text=True,
+                params_infer_code=params_infer_code,
+                use_decoder=True,
+                do_text_normalization=False,
+                do_homophone_replacement=False,
+            )
+            if result and len(result) > 0 and result[0] is not None and len(result[0]) > 0:
+                audio_arrays[idx] = _convert_wav_to_int16(result[0])
+        except Exception:
+            # Skip this sentence silently
+            pass
 
     return audio_arrays
+
+
+def _convert_wav_to_int16(wav: np.ndarray) -> np.ndarray:
+    """
+    Convert float wav to int16 with blended normalization.
+
+    Args:
+        wav: Float audio array
+
+    Returns:
+        Int16 audio array
+    """
+    normalized = float_to_int16(wav)
+    original = (wav * 32767).astype(np.int16)
+    # Blend normalized and original for balanced audio
+    return (normalized * 0.7 + original * 0.3).astype(np.int16)
