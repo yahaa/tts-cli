@@ -10,7 +10,7 @@ from .audio import (
 )
 from .text_processor import (
     split_text_intelligently, split_paragraph_to_sentences,
-    normalize_text_for_tts, split_and_merge_text
+    normalize_text_for_tts, split_and_merge_text, validate_text_for_chattts
 )
 from .tts import (
     init_chat_tts, load_speaker, save_speaker, sample_random_speaker,
@@ -240,7 +240,11 @@ def _generate_audio_multi_chunk(
 
     if not config.quiet:
         for i, chunk in enumerate(text_chunks, 1):
-            print_info(f"Chunk {i}: {len(chunk)} chars")
+            is_valid, invalid_chars = validate_text_for_chattts(chunk)
+            if not is_valid:
+                print_info(f"Chunk {i}: {len(chunk)} chars [WARNING: invalid chars: {invalid_chars}]")
+            else:
+                print_info(f"Chunk {i}: {len(chunk)} chars [OK]")
 
     # Process all chunks in batches
     chunk_audios = [None] * num_chunks

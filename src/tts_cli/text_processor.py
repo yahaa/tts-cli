@@ -114,6 +114,27 @@ def normalize_text_for_tts(text: str) -> str:
     return text.strip()
 
 
+def validate_text_for_chattts(text: str) -> tuple:
+    """
+    Validate that text only contains ChatTTS-supported characters.
+
+    Returns:
+        Tuple of (is_valid, invalid_chars)
+    """
+    invalid_chars = set()
+    for char in text:
+        if char.isascii() and char.isalpha():
+            continue  # a-z, A-Z
+        elif '\u4e00' <= char <= '\u9fff':
+            continue  # Chinese
+        elif char in '。，！？ ':
+            continue  # Allowed punctuation and space
+        else:
+            invalid_chars.add(char)
+
+    return (len(invalid_chars) == 0, invalid_chars)
+
+
 def split_text_intelligently(
     text: str,
     max_length: int = DEFAULT_MAX_LENGTH,
@@ -226,9 +247,9 @@ def split_paragraph_to_sentences(text: str) -> List[str]:
     return [s.strip() for s in sentences if s.strip()]
 
 
-# ChatTTS pause marker - [uv_break] creates natural pauses between sentences
-# Works with skip_refine_text=True per official documentation
-CHATTTS_PAUSE_MARKER = '[uv_break]'
+# Sentence separator - just use space, punctuation already provides natural pauses
+# [uv_break] contains invalid characters ([, ], _) that ChatTTS rejects
+CHATTTS_PAUSE_MARKER = ' '
 
 
 def merge_sentences_to_chunks(
