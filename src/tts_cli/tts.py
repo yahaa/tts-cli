@@ -312,12 +312,14 @@ def generate_audio_batch(
     speed: int,
     spk: torch.Tensor,
     break_level: int = 5,
-    quiet: bool = False
+    quiet: bool = False,
+    num_workers: int = 1
 ) -> List[np.ndarray]:
     """
-    Generate audio for multiple text chunks in a batch.
+    Generate audio for multiple text chunks using parallel processing.
 
-    This leverages GPU parallelism for faster generation.
+    Uses ThreadPoolExecutor for parallel inference, avoiding ChatTTS's
+    unreliable batch inference while still utilizing GPU parallelism.
 
     Args:
         chat: Initialized ChatTTS Chat instance
@@ -326,11 +328,13 @@ def generate_audio_batch(
         spk: Speaker embedding tensor
         break_level: Pause strength at punctuation (0-7)
         quiet: Suppress progress messages
+        num_workers: Number of parallel workers (default: 1)
 
     Returns:
         List of audio arrays (int16)
     """
     import ChatTTS as CT
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     # Filter out empty or too-short texts to avoid ChatTTS errors
     # Minimum 5 chars needed for reliable audio generation
@@ -362,52 +366,41 @@ def generate_audio_batch(
     # Build result array with None for all positions
     audio_arrays = [None] * len(texts)
 
-    # Try batch inference first (faster on GPU)
-    batch_success = False
-    try:
-        wavs = chat.infer(
-            valid_texts,
-            skip_refine_text=True,
-            params_infer_code=params_infer_code,
-            use_decoder=True,
-            do_text_normalization=False,
-            do_homophone_replacement=False,
-        )
-        if wavs is not None and len(wavs) == len(valid_texts):
-            batch_success = True
-            for idx, wav in zip(valid_indices, wavs):
-                if wav is not None and len(wav) > 0:
-                    audio_arrays[idx] = _convert_wav_to_int16(wav)
-                elif not quiet:
-                    print_info(f"Warning: Chunk {idx} returned empty audio")
-    except Exception as e:
-        batch_success = False
-        if not quiet:
-            print_info(f"Batch inference failed: {e}")
+    def infer_single(idx: int, text: str) -> tuple:
+        """Infer a single text chunk. Returns (idx, audio_array or None)."""
+        try:
+            result = chat.infer(
+                [text],
+                skip_refine_text=True,
+                params_infer_code=params_infer_code,
+                use_decoder=True,
+                do_text_normalization=False,
+                do_homophone_replacement=False,
+            )
+            if result and len(result) > 0 and result[0] is not None and len(result[0]) > 0:
+                return (idx, _convert_wav_to_int16(result[0]))
+            return (idx, None)
+        except Exception as e:
+            if not quiet:
+                print_info(f"Warning: Chunk {idx} error: {e}")
+            return (idx, None)
 
-    # Fallback: process failed items one by one
-    if not batch_success:
-        if not quiet:
-            print_info("Falling back to sequential processing...")
+    # Use parallel processing with ThreadPoolExecutor
+    if num_workers > 1 and len(valid_texts) > 1:
+        # Parallel processing
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            futures = {
+                executor.submit(infer_single, idx, text): idx
+                for idx, text in zip(valid_indices, valid_texts)
+            }
+            for future in as_completed(futures):
+                idx, audio = future.result()
+                audio_arrays[idx] = audio
+    else:
+        # Sequential processing (num_workers=1)
         for idx, text in zip(valid_indices, valid_texts):
-            if audio_arrays[idx] is not None:
-                continue  # Already succeeded in batch
-            try:
-                result = chat.infer(
-                    [text],
-                    skip_refine_text=True,
-                    params_infer_code=params_infer_code,
-                    use_decoder=True,
-                    do_text_normalization=False,
-                    do_homophone_replacement=False,
-                )
-                if result and len(result) > 0 and result[0] is not None and len(result[0]) > 0:
-                    audio_arrays[idx] = _convert_wav_to_int16(result[0])
-                elif not quiet:
-                    print_info(f"Warning: Chunk {idx} failed to generate audio")
-            except Exception as e:
-                if not quiet:
-                    print_info(f"Warning: Chunk {idx} error: {e}")
+            _, audio = infer_single(idx, text)
+            audio_arrays[idx] = audio
 
     # Report success rate
     success_count = sum(1 for a in audio_arrays if a is not None)

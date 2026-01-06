@@ -104,7 +104,13 @@ Examples:
         "--max-batch",
         type=int,
         default=1,
-        help="Max chunks to process in parallel (default: 1, increase for faster but less stable)",
+        help="Max chunks per batch for ChatTTS batch inference (default: 1)",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Number of parallel workers for audio generation (default: 1, recommended: 2-4)",
     )
     parser.add_argument(
         "--no-normalize",
@@ -162,6 +168,7 @@ def main():
             save_speaker=args.save_speaker,
             max_length=args.max_length,
             max_batch=args.max_batch,
+            num_workers=args.workers,
             no_normalize=args.no_normalize,
             whisper_model=args.whisper_model,
             skip_subtitles=args.skip_subtitles,

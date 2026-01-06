@@ -41,6 +41,7 @@ class TTSConfig:
         save_speaker: Optional[str] = None,
         max_length: Optional[int] = None,
         max_batch: int = 1,
+        num_workers: int = 1,
         no_normalize: bool = False,
         whisper_model: str = "base",
         skip_subtitles: bool = False,
@@ -58,6 +59,7 @@ class TTSConfig:
         self.save_speaker = save_speaker
         self.max_length = max_length
         self.max_batch = max_batch
+        self.num_workers = num_workers
         self.no_normalize = no_normalize
         self.whisper_model = whisper_model
         self.skip_subtitles = skip_subtitles
@@ -229,7 +231,7 @@ def _generate_audio_multi_chunk(
         print_step(1, total_steps, f"Generating audio ({num_chunks} chunks, avg {avg_chunk_chars} chars each)...")
         print_info(f"GPU free memory: {free_mem:.0f} MB")
         print_info(f"Estimated memory per chunk: {mem_per_chunk:.0f} MB")
-        print_info(f"Auto batch size: {batch_size}")
+        print_info(f"Batch size: {batch_size}, Workers: {config.num_workers}")
 
     # Load or create speaker (ensure consistency across chunks)
     if config.speaker:
@@ -261,14 +263,15 @@ def _generate_audio_multi_chunk(
         if not config.quiet:
             print_info(f"Processing batch {batch_idx + 1}/{num_batches} (chunks {start_idx + 1}-{end_idx})...")
 
-        # Batch inference
+        # Batch inference with parallel workers
         batch_audios = generate_audio_batch(
             chat=chat,
             texts=batch_chunks,
             speed=config.speed,
             spk=spk,
             break_level=config.break_level,
-            quiet=config.quiet
+            quiet=config.quiet,
+            num_workers=config.num_workers
         )
 
         # Store results
