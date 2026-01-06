@@ -76,9 +76,9 @@ def estimate_memory_per_chunk_mb(chunk_chars: int = 800, fp16: bool = True) -> f
 def calculate_optimal_batch_size(
     num_chunks: int,
     chunk_chars: int = 800,
-    reserved_memory_mb: float = 1024,
+    reserved_memory_mb: float = 2048,
     min_batch: int = 1,
-    max_batch: int = 6
+    max_batch: int = 16
 ) -> int:
     """
     Calculate optimal batch size based on available GPU memory.
