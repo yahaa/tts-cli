@@ -22,15 +22,16 @@ SENTENCE_END_PATTERN = r'[.!?。！？]'
 
 def normalize_text_for_tts(text: str) -> str:
     """
-    Normalize text to avoid ChatTTS invalid character warnings.
+    Normalize text for ChatTTS compatibility.
 
-    ChatTTS only supports a limited character set:
+    ChatTTS has a very limited character set. This function aggressively
+    converts or removes unsupported characters to prevent generation failures.
+
+    Confirmed supported:
     - English letters (a-z, A-Z)
     - Chinese characters (U+4E00-U+9FFF)
-    - Basic punctuation (. , ! ? ' space)
-    - Chinese punctuation (。，！？)
-
-    All other characters are converted or removed.
+    - Chinese punctuation: 。，！？
+    - Space
 
     Args:
         text: Input text
@@ -38,7 +39,7 @@ def normalize_text_for_tts(text: str) -> str:
     Returns:
         Normalized text safe for ChatTTS
     """
-    # Step 1: Convert numbers to words (before removing digits)
+    # Step 1: Convert numbers to words
     num_to_word = {
         '0': 'zero', '1': 'one', '2': 'two', '3': 'three', '4': 'four',
         '5': 'five', '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine'
@@ -50,7 +51,7 @@ def normalize_text_for_tts(text: str) -> str:
     text = text.replace('2024', 'twenty twenty four')
     text = text.replace('2023', 'twenty twenty three')
 
-    # Replace multi-digit numbers (up to 20)
+    # Replace multi-digit numbers
     def replace_number(match):
         num = int(match.group(0))
         if num <= 20:
@@ -59,96 +60,51 @@ def normalize_text_for_tts(text: str) -> str:
                     'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen',
                     'nineteen', 'twenty']
             return words[num]
-        # For larger numbers, spell out each digit
         return ' '.join(num_to_word[d] for d in str(num))
 
     text = re.sub(r'\b\d+\b', replace_number, text)
 
-    # Step 2: Replace special punctuation with spaces or supported alternatives
-    replacements = {
-        # Dashes
-        '—': ' ',    # em-dash
-        '–': ' ',    # en-dash
-        '-': ' ',    # hyphen
-        '―': ' ',    # horizontal bar
-        # Colons/semicolons -> comma (preserves natural pause)
-        ':': ',',
-        ';': ',',
-        '：': '，',   # full-width
-        '；': '，',
-        # Quotes (remove all)
-        '"': '',     # curly quote
-        '"': '',
-        ''': '',     # curly apostrophe
-        ''': '',
-        '「': '',    # CJK quotes
-        '」': '',
-        '『': '',
-        '』': '',
-        '«': '',     # guillemets
-        '»': '',
-        # Brackets/parentheses
-        '(': ' ',
-        ')': ' ',
-        '（': ' ',   # full-width
-        '）': ' ',
-        '[': ' ',
-        ']': ' ',
-        '【': ' ',   # CJK brackets
-        '】': ' ',
-        '{': ' ',
-        '}': ' ',
-        # Slashes
-        '/': ' ',
-        '\\': ' ',
-        '／': ' ',   # full-width
-        # Symbols
-        '@': ' at ',
-        '#': ' ',
-        '$': ' ',
-        '￥': ' ',   # yen
-        '%': ' percent ',
-        '&': ' and ',
-        '*': ' ',
-        '+': ' plus ',
-        '=': ' equals ',
-        '<': ' ',
-        '>': ' ',
-        '|': ' ',
-        '~': ' ',
-        '`': '',
-        '^': ' ',
-        '_': ' ',
-        '·': ' ',    # middle dot
-        '•': ' ',    # bullet
-        '…': '.',    # ellipsis -> period
-        '\u3000': ' ',  # ideographic space
-        '\xa0': ' ',    # non-breaking space
-        '\t': ' ',      # tab
-        '\r': ' ',      # carriage return
+    # Step 2: Convert all punctuation to Chinese full-width equivalents
+    # This is the safest approach as ChatTTS definitely supports these
+    punctuation_map = {
+        # Half-width to full-width
+        '.': '。',
+        ',': '，',
+        '!': '！',
+        '?': '？',
+        ';': '，',
+        ':': '，',
+        # Already full-width - keep as is
+        '。': '。',
+        '，': '，',
+        '！': '！',
+        '？': '？',
+        # Ellipsis
+        '…': '。',
+        '⋯': '。',
     }
 
-    for old, new in replacements.items():
+    for old, new in punctuation_map.items():
         text = text.replace(old, new)
 
-    # Step 2.5: Convert problematic punctuation for ChatTTS compatibility
-    # ChatTTS reports "found invalid characters: {'?'}" for half-width ?
-    text = text.replace('?', '？')
-
-    # Step 3: Final filter - only keep allowed characters
-    # Allowed: a-z, A-Z, Chinese chars, space, basic punctuation
-    allowed_punctuation = set('.,!\' 。，！？、')
-
+    # Step 3: Remove or replace all other special characters
     result = []
     for char in text:
-        if char.isalpha():  # English and other alphabets
+        if char.isascii() and char.isalpha():
+            # English letters a-z, A-Z
             result.append(char)
-        elif '\u4e00' <= char <= '\u9fff':  # Chinese characters
+        elif '\u4e00' <= char <= '\u9fff':
+            # Chinese characters
             result.append(char)
-        elif char in allowed_punctuation:
+        elif char in '。，！？':
+            # Chinese punctuation (confirmed supported)
             result.append(char)
+        elif char == ' ' or char == '\n':
+            # Whitespace
+            result.append(' ')
         else:
-            result.append(' ')  # Replace unknown chars with space
+            # Everything else becomes space (safer than removing)
+            result.append(' ')
 
     text = ''.join(result)
 
