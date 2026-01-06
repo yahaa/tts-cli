@@ -266,8 +266,8 @@ def split_paragraph_to_sentences(text: str) -> List[str]:
     return [s.strip() for s in sentences if s.strip()]
 
 
-# ChatTTS pause marker for sentence boundaries
-CHATTTS_PAUSE_MARKER = '[uv_break]'
+# Separator between sentences (space is sufficient as sentences have their own punctuation)
+CHATTTS_PAUSE_MARKER = ' '
 
 
 def merge_sentences_to_chunks(

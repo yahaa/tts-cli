@@ -240,9 +240,7 @@ def _generate_audio_multi_chunk(
 
     if not config.quiet:
         for i, chunk in enumerate(text_chunks, 1):
-            # Count sentences by [uv_break] markers
-            sentence_count = chunk.count('[uv_break]') + 1
-            print_info(f"Chunk {i}: {len(chunk)} chars, {sentence_count} sentences")
+            print_info(f"Chunk {i}: {len(chunk)} chars")
 
     # Process all chunks in batches
     chunk_audios = [None] * num_chunks
