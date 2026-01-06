@@ -364,9 +364,18 @@ def generate_audio_batch(
     # Build result array with None for all positions
     audio_arrays = [None] * len(texts)
 
-    # Suppress ChatTTS stderr to hide "unexpected end at index" warnings
+    # Filter stderr to hide "unexpected end at index" but keep tqdm progress
+    class FilteredStderr:
+        def __init__(self, original):
+            self.original = original
+        def write(self, msg):
+            if 'unexpected end at index' not in msg:
+                self.original.write(msg)
+        def flush(self):
+            self.original.flush()
+
     old_stderr = sys.stderr
-    sys.stderr = io.StringIO()
+    sys.stderr = FilteredStderr(old_stderr)
 
     try:
         # Try batch inference first (faster on GPU)
