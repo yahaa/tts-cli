@@ -241,6 +241,10 @@ def generate_audio(
     """
     import ChatTTS as CT
 
+    # Validate text is not empty or too short
+    if not text or len(text.strip()) < 2:
+        raise ValueError("Text is too short to generate audio (minimum 2 characters)")
+
     if not quiet:
         print_info(f"Speed parameter: speed_{speed}")
 
@@ -328,7 +332,21 @@ def generate_audio_batch(
     """
     import ChatTTS as CT
 
+    # Filter out empty or too-short texts to avoid ChatTTS errors
+    # Keep track of original indices for result mapping
+    valid_indices = []
+    valid_texts = []
+    for i, text in enumerate(texts):
+        if text and len(text.strip()) >= 2:
+            valid_indices.append(i)
+            valid_texts.append(text)
+
+    # If no valid texts, return list of None
+    if not valid_texts:
+        return [None] * len(texts)
+
     # Audio generation parameters
+    # Note: ensure_non_empty=False to avoid "unexpected end at index" errors on Windows
     params_infer_code = CT.Chat.InferCodeParams(
         spk_emb=spk,
         prompt=f"[speed_{speed}]",
@@ -337,30 +355,48 @@ def generate_audio_batch(
         top_K=20,
         repetition_penalty=1.05,
         max_new_token=2048,
-        ensure_non_empty=True,
+        ensure_non_empty=False,
     )
 
-    # Batch inference
-    # Note: skip_refine_text=True avoids "narrow(): length must be non-negative" errors
-    wavs = chat.infer(
-        texts,
-        skip_refine_text=True,
-        params_infer_code=params_infer_code,
-        use_decoder=True,
-        do_text_normalization=False,
-        do_homophone_replacement=False,
-    )
+    # Try batch inference first
+    try:
+        wavs = chat.infer(
+            valid_texts,
+            skip_refine_text=True,
+            params_infer_code=params_infer_code,
+            use_decoder=True,
+            do_text_normalization=False,
+            do_homophone_replacement=False,
+        )
+    except Exception as e:
+        # If batch fails, fall back to one-by-one processing
+        if not quiet:
+            print_info(f"Batch inference failed ({e}), falling back to sequential...")
+        wavs = []
+        for text in valid_texts:
+            try:
+                result = chat.infer(
+                    [text],
+                    skip_refine_text=True,
+                    params_infer_code=params_infer_code,
+                    use_decoder=True,
+                    do_text_normalization=False,
+                    do_homophone_replacement=False,
+                )
+                wavs.append(result[0] if result else None)
+            except Exception:
+                wavs.append(None)
 
-    # Convert to int16 with blended normalization
-    audio_arrays = []
-    for wav in wavs:
+    # Build result array with None for filtered-out texts
+    audio_arrays = [None] * len(texts)
+
+    # Convert valid results to int16 with blended normalization
+    for idx, wav in zip(valid_indices, wavs):
         if wav is not None and len(wav) > 0:
             normalized = float_to_int16(wav)
             original = (wav * 32767).astype(np.int16)
             # Blend normalized and original for balanced audio
             audio_data = (normalized * 0.7 + original * 0.3).astype(np.int16)
-            audio_arrays.append(audio_data)
-        else:
-            audio_arrays.append(None)
+            audio_arrays[idx] = audio_data
 
     return audio_arrays

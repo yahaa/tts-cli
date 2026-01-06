@@ -212,10 +212,17 @@ def _generate_audio_multi_chunk(
         sentences = split_paragraph_to_sentences(para)
         if not sentences:
             sentences = [para]
+        # Filter out sentences that are too short (< 2 chars) - they cause ChatTTS errors
+        sentences = [s for s in sentences if len(s.strip()) >= 2]
+        if not sentences:
+            # If all sentences were filtered out, use the paragraph as-is
+            sentences = [para] if len(para.strip()) >= 2 else []
         all_sentences.extend(sentences)
         paragraph_boundaries.append(len(all_sentences))
 
     num_sentences = len(all_sentences)
+    if num_sentences == 0:
+        raise ValueError("No valid text content to generate audio from. Text may be too short.")
     avg_sentence_chars = sum(len(s) for s in all_sentences) // max(num_sentences, 1)
 
     # Calculate optimal batch size based on GPU memory
