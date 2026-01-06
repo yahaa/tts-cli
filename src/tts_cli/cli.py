@@ -24,89 +24,86 @@ Examples:
   %(prog)s --input story.txt --output-audio story.wav --speed 2
   %(prog)s --text "Quick test" --skip-subtitles
   %(prog)s --file data.txt --quiet
-        """
+        """,
     )
 
     # Input group (mutually exclusive)
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument(
-        "--text",
-        type=str,
-        help="Direct text input to convert to speech"
+        "--text", type=str, help="Direct text input to convert to speech"
     )
     # Support both --file (README) and --input (reference implementation)
     input_group.add_argument(
         "--file",
         type=str,
         dest="input_file",
-        help="Read text from file (UTF-8 encoded)"
+        help="Read text from file (UTF-8 encoded)",
     )
     input_group.add_argument(
         "--input",
         type=str,
         dest="input_file",
-        help="Read text from file (UTF-8 encoded) - alias for --file"
+        help="Read text from file (UTF-8 encoded) - alias for --file",
     )
 
     # Output options - support both naming conventions
     parser.add_argument(
-        "--output", "--output-audio",
+        "--output",
+        "--output-audio",
         type=str,
         dest="output_audio",
         default="output.wav",
-        help="Output audio file path (default: output.wav)"
+        help="Output audio file path (default: output.wav)",
     )
     parser.add_argument(
-        "--subtitle", "--output-srt",
+        "--subtitle",
+        "--output-srt",
         type=str,
         dest="output_srt",
         default=None,
-        help="Output SRT subtitle file path (default: auto-derived from audio name)"
+        help="Output SRT subtitle file path (default: auto-derived from audio name)",
     )
 
     # Audio generation options
     parser.add_argument(
-        "--speed",
-        type=int,
-        default=3,
-        help="Speech speed 0-9 (default: 3)"
+        "--speed", type=int, default=3, help="Speech speed 0-9 (default: 3)"
     )
     parser.add_argument(
         "--language",
         type=str,
         default="en",
         choices=["en", "zh"],
-        help="Language code: 'en' or 'zh' (default: en)"
+        help="Language code: 'en' or 'zh' (default: en)",
     )
     parser.add_argument(
         "--break-level",
         type=int,
         default=5,
         choices=range(8),
-        help="Punctuation pause strength 0-7 (default: 5, higher=longer pauses)"
+        help="Punctuation pause strength 0-7 (default: 5, higher=longer pauses)",
     )
     parser.add_argument(
         "--speaker",
         type=str,
         default=None,
-        help="Speaker embedding file (PT format). If not provided, a random speaker will be sampled"
+        help="Speaker embedding file (PT format). If not provided, a random speaker will be sampled",
     )
     parser.add_argument(
         "--save-speaker",
         type=str,
         default=None,
-        help="Save the used speaker embedding to file for reuse"
+        help="Save the used speaker embedding to file for reuse",
     )
     parser.add_argument(
         "--max-length",
         type=int,
-        default=None,
-        help="Auto-split text longer than this into chunks (default: None, recommended: 800)"
+        default=800,
+        help="Auto-split text longer than this into chunks (default: None, recommended: 800)",
     )
     parser.add_argument(
         "--no-normalize",
         action="store_true",
-        help="Disable text normalization (normalization is enabled by default)"
+        help="Disable text normalization (normalization is enabled by default)",
     )
 
     # Subtitle options
@@ -115,24 +112,22 @@ Examples:
         type=str,
         default="base",
         choices=["tiny", "base", "small", "medium", "large"],
-        help="Whisper model size (default: base)"
+        help="Whisper model size (default: base)",
     )
     parser.add_argument(
         "--skip-subtitles",
         action="store_true",
-        help="Generate audio only, skip subtitle generation"
+        help="Generate audio only, skip subtitle generation",
     )
     parser.add_argument(
-        "--no-json",
-        action="store_true",
-        help="Skip JSON output generation"
+        "--no-json", action="store_true", help="Skip JSON output generation"
     )
 
     # Output control
     parser.add_argument(
         "--quiet",
         action="store_true",
-        help="Suppress progress messages, show only file paths"
+        help="Suppress progress messages, show only file paths",
     )
 
     return parser
