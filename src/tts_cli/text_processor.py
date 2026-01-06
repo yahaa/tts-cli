@@ -266,6 +266,115 @@ def split_paragraph_to_sentences(text: str) -> List[str]:
     return [s.strip() for s in sentences if s.strip()]
 
 
+# ChatTTS pause marker for sentence boundaries
+CHATTTS_PAUSE_MARKER = '[uv_break]'
+
+
+def merge_sentences_to_chunks(
+    sentences: List[str],
+    target_length: int = 600,
+    max_length: int = 800,
+    min_sentence_length: int = 10
+) -> List[str]:
+    """
+    Merge sentences into larger chunks for more efficient TTS processing.
+
+    Short sentences are merged with adjacent sentences using ChatTTS pause markers.
+    Each chunk aims to be close to target_length but not exceed max_length.
+
+    Args:
+        sentences: List of sentences to merge
+        target_length: Target chunk length (default: 600)
+        max_length: Maximum chunk length (default: 800)
+        min_sentence_length: Minimum length for a standalone sentence (default: 10)
+
+    Returns:
+        List of merged chunks with pause markers
+    """
+    if not sentences:
+        return []
+
+    chunks = []
+    current_chunk = []
+    current_length = 0
+
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+
+        sentence_len = len(sentence)
+        # Account for pause marker length when merging
+        marker_len = len(CHATTTS_PAUSE_MARKER) if current_chunk else 0
+        new_length = current_length + marker_len + sentence_len
+
+        if current_chunk and new_length > max_length:
+            # Current chunk is full, save it and start new one
+            chunks.append(CHATTTS_PAUSE_MARKER.join(current_chunk))
+            current_chunk = [sentence]
+            current_length = sentence_len
+        elif current_chunk and current_length >= target_length and sentence_len >= min_sentence_length:
+            # Current chunk reached target and next sentence is long enough to stand alone
+            chunks.append(CHATTTS_PAUSE_MARKER.join(current_chunk))
+            current_chunk = [sentence]
+            current_length = sentence_len
+        else:
+            # Add sentence to current chunk
+            current_chunk.append(sentence)
+            current_length = new_length
+
+    # Don't forget the last chunk
+    if current_chunk:
+        chunks.append(CHATTTS_PAUSE_MARKER.join(current_chunk))
+
+    return chunks
+
+
+def split_and_merge_text(
+    text: str,
+    target_length: int = 600,
+    max_length: int = 800
+) -> List[str]:
+    """
+    Split text into sentences and merge them into optimal chunks.
+
+    This is the recommended function for preparing text for ChatTTS.
+    It ensures chunks are close to target_length for optimal quality
+    and includes pause markers between sentences.
+
+    Args:
+        text: Input text
+        target_length: Target chunk length (default: 600)
+        max_length: Maximum chunk length (default: 800)
+
+    Returns:
+        List of text chunks ready for TTS
+    """
+    # First split by paragraphs
+    paragraphs = re.split(r'\n+', text)
+
+    all_chunks = []
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+
+        # Split paragraph into sentences
+        sentences = split_paragraph_to_sentences(para)
+        if not sentences:
+            sentences = [para]
+
+        # Merge sentences into chunks
+        chunks = merge_sentences_to_chunks(
+            sentences,
+            target_length=target_length,
+            max_length=max_length
+        )
+        all_chunks.extend(chunks)
+
+    return all_chunks
+
+
 def estimate_text_length(text: str) -> int:
     """
     Estimate the "effective" length of text for TTS.

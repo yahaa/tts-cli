@@ -10,7 +10,7 @@ from .audio import (
 )
 from .text_processor import (
     split_text_intelligently, split_paragraph_to_sentences,
-    normalize_text_for_tts
+    normalize_text_for_tts, split_and_merge_text
 )
 from .tts import (
     init_chat_tts, load_speaker, save_speaker, sample_random_speaker,
@@ -105,12 +105,15 @@ def run_tts_with_subtitles(config: TTSConfig) -> None:
     # 5. Initialize ChatTTS
     chat = init_chat_tts(quiet=config.quiet)
 
-    # 6. Check if text needs splitting
-    text_chunks = []
-    if config.max_length and len(text) > config.max_length:
-        text_chunks = split_text_intelligently(text, config.max_length)
+    # 6. Split and merge text into optimal chunks
+    # Each chunk will be ~600-800 chars with [uv_break] markers between sentences
+    max_length = config.max_length or 800
+    target_length = int(max_length * 0.75)  # Target 75% of max for flexibility
+
+    if len(text) > target_length:
+        text_chunks = split_and_merge_text(text, target_length=target_length, max_length=max_length)
         if not config.quiet:
-            print_info(f"Text split into {len(text_chunks)} chunks for better quality")
+            print_info(f"Text merged into {len(text_chunks)} chunks (target: {target_length} chars each)")
     else:
         text_chunks = [text]
 
@@ -193,52 +196,36 @@ def _generate_audio_multi_chunk(
     """
     Generate audio for multiple text chunks with batch processing.
 
+    Each chunk contains merged sentences with [uv_break] markers for natural pauses.
+    This approach avoids short sentence issues and maximizes GPU efficiency.
+
     Args:
         chat: ChatTTS instance
-        text_chunks: List of text chunks (paragraphs)
+        text_chunks: List of text chunks (each ~600-800 chars with pause markers)
         config: TTS configuration
         total_steps: Total number of steps for progress display
 
     Returns:
         Total audio duration in seconds
     """
-    num_paragraphs = len(text_chunks)
+    num_chunks = len(text_chunks)
+    if num_chunks == 0:
+        raise ValueError("No valid text content to generate audio from.")
 
-    # Split each paragraph into sentences
-    # Minimum 5 chars needed for reliable ChatTTS audio generation
-    MIN_SENTENCE_LENGTH = 5
-    all_sentences = []
-    paragraph_boundaries = [0]
-
-    for para in text_chunks:
-        sentences = split_paragraph_to_sentences(para)
-        if not sentences:
-            sentences = [para]
-        # Filter out sentences that are too short - they cause ChatTTS errors
-        sentences = [s.strip() for s in sentences if len(s.strip()) >= MIN_SENTENCE_LENGTH]
-        if not sentences and para.strip():
-            # If all sentences filtered out but paragraph has content, use it as-is
-            sentences = [para.strip()] if len(para.strip()) >= MIN_SENTENCE_LENGTH else []
-        all_sentences.extend(sentences)
-        paragraph_boundaries.append(len(all_sentences))
-
-    num_sentences = len(all_sentences)
-    if num_sentences == 0:
-        raise ValueError("No valid text content to generate audio from. Text may be too short.")
-    avg_sentence_chars = sum(len(s) for s in all_sentences) // max(num_sentences, 1)
+    avg_chunk_chars = sum(len(c) for c in text_chunks) // num_chunks
 
     # Calculate optimal batch size based on GPU memory
     batch_size = calculate_optimal_batch_size(
-        num_chunks=num_sentences,
-        chunk_chars=avg_sentence_chars
+        num_chunks=num_chunks,
+        chunk_chars=avg_chunk_chars
     )
 
     if not config.quiet:
         free_mem = get_gpu_free_memory_mb()
-        mem_per_chunk = estimate_memory_per_chunk_mb(avg_sentence_chars)
-        print_step(1, total_steps, f"Generating audio ({num_paragraphs} paragraphs, {num_sentences} sentences)...")
+        mem_per_chunk = estimate_memory_per_chunk_mb(avg_chunk_chars)
+        print_step(1, total_steps, f"Generating audio ({num_chunks} chunks, avg {avg_chunk_chars} chars each)...")
         print_info(f"GPU free memory: {free_mem:.0f} MB")
-        print_info(f"Estimated memory per sentence: {mem_per_chunk:.0f} MB")
+        print_info(f"Estimated memory per chunk: {mem_per_chunk:.0f} MB")
         print_info(f"Auto batch size: {batch_size}")
 
     # Load or create speaker (ensure consistency across chunks)
@@ -252,26 +239,27 @@ def _generate_audio_multi_chunk(
                 print_info(f"Speaker saved to: {config.save_speaker}")
 
     if not config.quiet:
-        for i, para in enumerate(text_chunks, 1):
-            para_sentences = split_paragraph_to_sentences(para)
-            print_info(f"Paragraph {i}: {len(para)} chars, {len(para_sentences)} sentences")
+        for i, chunk in enumerate(text_chunks, 1):
+            # Count sentences by [uv_break] markers
+            sentence_count = chunk.count('[uv_break]') + 1
+            print_info(f"Chunk {i}: {len(chunk)} chars, {sentence_count} sentences")
 
-    # Process all sentences in batches
-    sentence_audios = [None] * num_sentences
-    num_batches = (num_sentences + batch_size - 1) // batch_size
+    # Process all chunks in batches
+    chunk_audios = [None] * num_chunks
+    num_batches = (num_chunks + batch_size - 1) // batch_size
 
     for batch_idx in range(num_batches):
         start_idx = batch_idx * batch_size
-        end_idx = min(start_idx + batch_size, num_sentences)
-        batch_sentences = all_sentences[start_idx:end_idx]
+        end_idx = min(start_idx + batch_size, num_chunks)
+        batch_chunks = text_chunks[start_idx:end_idx]
 
         if not config.quiet:
-            print_info(f"Processing batch {batch_idx + 1}/{num_batches} (sentences {start_idx + 1}-{end_idx})...")
+            print_info(f"Processing batch {batch_idx + 1}/{num_batches} (chunks {start_idx + 1}-{end_idx})...")
 
         # Batch inference
         batch_audios = generate_audio_batch(
             chat=chat,
-            texts=batch_sentences,
+            texts=batch_chunks,
             speed=config.speed,
             spk=spk,
             break_level=config.break_level,
@@ -280,18 +268,19 @@ def _generate_audio_multi_chunk(
 
         # Store results
         for i, audio in enumerate(batch_audios):
-            sentence_audios[start_idx + i] = audio
+            chunk_audios[start_idx + i] = audio
 
-    # Merge with proper pause durations
+    # Merge chunks with paragraph pauses (1.0s between chunks)
     if not config.quiet:
-        print_info("Merging audio with pauses...")
+        print_info("Merging audio chunks...")
 
+    # Simple merge - each chunk is a unit, add pause between chunks
     merged_audio = merge_with_pauses(
-        audio_segments=sentence_audios,
-        paragraph_boundaries=paragraph_boundaries,
+        audio_segments=chunk_audios,
+        paragraph_boundaries=list(range(num_chunks + 1)),  # Each chunk is a "paragraph"
         sample_rate=SAMPLE_RATE,
-        sentence_pause=0.5,
-        paragraph_pause=1.0
+        sentence_pause=0.3,   # Shorter pause (sentences already have [uv_break])
+        paragraph_pause=0.8   # Pause between chunks
     )
 
     # Final normalization
