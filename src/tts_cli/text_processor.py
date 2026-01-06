@@ -64,21 +64,17 @@ def normalize_text_for_tts(text: str) -> str:
 
     text = re.sub(r'\b\d+\b', replace_number, text)
 
-    # Step 2: Convert all punctuation to Chinese full-width equivalents
-    # This is the safest approach as ChatTTS definitely supports these
+    # Step 2: Convert punctuation - remove ? entirely as ChatTTS doesn't support it
     punctuation_map = {
+        # Question marks - REMOVE (ChatTTS reports "found invalid characters: {'?'}")
+        '?': '，',   # Replace with comma for a pause
+        '？': '，',  # Full-width too
         # Half-width to full-width
         '.': '。',
         ',': '，',
         '!': '！',
-        '?': '？',
         ';': '，',
         ':': '，',
-        # Already full-width - keep as is
-        '。': '。',
-        '，': '，',
-        '！': '！',
-        '？': '？',
         # Ellipsis
         '…': '。',
         '⋯': '。',
@@ -87,7 +83,7 @@ def normalize_text_for_tts(text: str) -> str:
     for old, new in punctuation_map.items():
         text = text.replace(old, new)
 
-    # Step 3: Remove or replace all other special characters
+    # Step 3: Only keep confirmed supported characters
     result = []
     for char in text:
         if char.isascii() and char.isalpha():
@@ -96,14 +92,14 @@ def normalize_text_for_tts(text: str) -> str:
         elif '\u4e00' <= char <= '\u9fff':
             # Chinese characters
             result.append(char)
-        elif char in '。，！？':
-            # Chinese punctuation (confirmed supported)
+        elif char in '。，！':
+            # Chinese punctuation (NO question mark - not supported)
             result.append(char)
         elif char == ' ' or char == '\n':
             # Whitespace
             result.append(' ')
         else:
-            # Everything else becomes space (safer than removing)
+            # Everything else becomes space
             result.append(' ')
 
     text = ''.join(result)
