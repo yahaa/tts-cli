@@ -10,10 +10,11 @@ import unicodedata
 from typing import List
 
 # Default maximum length for each chunk (characters)
-DEFAULT_MAX_LENGTH = 800
+# Smaller chunks are more reliable for ChatTTS generation
+DEFAULT_MAX_LENGTH = 500
 
 # Minimum length for the last chunk to avoid quality issues
-DEFAULT_MIN_TAIL_LENGTH = 300
+DEFAULT_MIN_TAIL_LENGTH = 200
 
 # Sentence ending punctuation patterns
 SENTENCE_END_PATTERN_EN = r'[.!?]'
@@ -255,8 +256,8 @@ CHATTTS_PAUSE_MARKER = ' '
 
 def merge_sentences_to_chunks(
     sentences: List[str],
-    target_length: int = 600,
-    max_length: int = 800,
+    target_length: int = 400,
+    max_length: int = 500,
     min_sentence_length: int = 10
 ) -> List[str]:
     """
@@ -315,8 +316,8 @@ def merge_sentences_to_chunks(
 
 def split_and_merge_text(
     text: str,
-    target_length: int = 600,
-    max_length: int = 800
+    target_length: int = 400,
+    max_length: int = 500
 ) -> List[str]:
     """
     Split text into sentences and merge them into optimal chunks.

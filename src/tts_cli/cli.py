@@ -97,8 +97,8 @@ Examples:
     parser.add_argument(
         "--max-length",
         type=int,
-        default=800,
-        help="Auto-split text longer than this into chunks (default: None, recommended: 800)",
+        default=500,
+        help="Auto-split text longer than this into chunks (default: 500)",
     )
     parser.add_argument(
         "--no-normalize",
