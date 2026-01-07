@@ -80,11 +80,11 @@ def read_text_from_file(filepath: str) -> str:
 
     # Try UTF-8 first
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             return f.read()
     except UnicodeDecodeError:
         # Try UTF-8 with BOM
-        with open(filepath, 'r', encoding='utf-8-sig') as f:
+        with open(filepath, "r", encoding="utf-8-sig") as f:
             return f.read()
 
 
@@ -103,8 +103,7 @@ def check_dependencies(require_whisper: bool = True) -> None:
         import ChatTTS  # noqa: F401
     except ImportError as exc:
         raise ImportError(
-            "ChatTTS not found. Install it with:\n"
-            "   pip install ChatTTS"
+            "ChatTTS not found. Install it with:\n   pip install ChatTTS"
         ) from exc
 
     if require_whisper:
@@ -116,13 +115,14 @@ def check_dependencies(require_whisper: bool = True) -> None:
                 "1. Install Whisper to enable subtitle generation:\n"
                 "   pip install openai-whisper\n\n"
                 "2. Skip subtitle generation and generate audio only:\n"
-                "   tts-cli --text \"...\" --skip-subtitles"
+                '   tts-cli --text "..." --skip-subtitles'
             ) from exc
 
 
 # ========================================
 # Progress Output Functions
 # ========================================
+
 
 def print_header() -> None:
     """Print CLI header."""
@@ -148,9 +148,9 @@ def print_success(message: str, indent: int = 1) -> None:
 
 def print_summary(stats: Dict) -> None:
     """Print final summary."""
-    print(f"\n[Statistics]")
+    print("\n[Statistics]")
     print(f"   Audio duration: {stats['duration']:.2f} seconds")
-    if stats['segments'] > 0:
+    if stats["segments"] > 0:
         print(f"   Subtitle segments: {stats['segments']} segments")
     print(f"   Total characters: {stats['characters']} characters")
     print(f"   Average speed: {stats['chars_per_sec']:.1f} chars/sec")
@@ -159,10 +159,10 @@ def print_summary(stats: Dict) -> None:
     print("All done!")
     print("=" * 70)
     print("\nGenerated files:")
-    for i, filepath in enumerate(stats['files'], 1):
+    for i, filepath in enumerate(stats["files"], 1):
         print(f"   {i}. {filepath}")
 
-    if stats['segments'] > 0:
+    if stats["segments"] > 0:
         print("\nTip: Use a video player to load the subtitle file")
     print("=" * 70 + "\n")
 

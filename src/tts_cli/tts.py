@@ -5,19 +5,19 @@ with GPU memory management and batch processing for optimal performance.
 """
 
 import os
-from typing import Optional, Tuple, List
+from typing import List, Optional, Tuple
 
 import numpy as np
-import torch
 import scipy.io.wavfile as wavfile
+import torch
 
-from .audio import float_to_int16, SAMPLE_RATE
+from .audio import SAMPLE_RATE, float_to_int16
 from .utils import print_info, print_success
-
 
 # ========================================
 # GPU Memory Utils
 # ========================================
+
 
 def get_gpu_free_memory_mb() -> float:
     """
@@ -60,7 +60,9 @@ def estimate_memory_per_chunk_mb(chunk_chars: int = 800, fp16: bool = True) -> f
     bytes_per_element = 2 if fp16 else 4
 
     # KV cache: 2 (K+V) * layers * seq_len * hidden_size * bytes
-    kv_cache_mb = (2 * num_layers * total_tokens * hidden_size * bytes_per_element) / (1024 * 1024)
+    kv_cache_mb = (2 * num_layers * total_tokens * hidden_size * bytes_per_element) / (
+        1024 * 1024
+    )
 
     # Intermediate activations (roughly 1.5x KV cache)
     activations_mb = kv_cache_mb * 1.5
@@ -76,7 +78,7 @@ def calculate_optimal_batch_size(
     chunk_chars: int = 500,
     reserved_memory_mb: float = 2048,
     min_batch: int = 1,
-    max_batch: int = 1  # Disabled batch processing - sequential is more reliable
+    max_batch: int = 1,  # Disabled batch processing - sequential is more reliable
 ) -> int:
     """
     Calculate optimal batch size based on available GPU memory.
@@ -95,7 +97,7 @@ def calculate_optimal_batch_size(
 
     if free_memory <= 0:
         # No GPU or can't detect, use conservative batch size
-        return min(2, num_chunks)
+        return min(1, num_chunks)
 
     # Available memory for inference
     available_mb = free_memory - reserved_memory_mb
@@ -117,6 +119,7 @@ def calculate_optimal_batch_size(
 # ========================================
 # ChatTTS Initialization
 # ========================================
+
 
 def init_chat_tts(quiet: bool = False):
     """
@@ -143,14 +146,19 @@ def init_chat_tts(quiet: bool = False):
     loaded = False
 
     if os.path.exists(hf_cache_path):
-        snapshots = [d for d in os.listdir(hf_cache_path)
-                    if os.path.isdir(os.path.join(hf_cache_path, d))]
+        snapshots = [
+            d
+            for d in os.listdir(hf_cache_path)
+            if os.path.isdir(os.path.join(hf_cache_path, d))
+        ]
         if snapshots:
             custom_path = os.path.join(hf_cache_path, snapshots[0])
             if not quiet:
                 print_info(f"Trying to load from cache: {custom_path}")
             try:
-                loaded = chat.load(source="custom", custom_path=custom_path, compile=False)
+                loaded = chat.load(
+                    source="custom", custom_path=custom_path, compile=False
+                )
             except Exception as e:
                 if not quiet:
                     print_info(f"Custom load failed: {e}, falling back to huggingface")
@@ -171,6 +179,7 @@ def init_chat_tts(quiet: bool = False):
 # ========================================
 # Speaker Management
 # ========================================
+
 
 def load_speaker(speaker_file: str) -> torch.Tensor:
     """
@@ -213,6 +222,7 @@ def sample_random_speaker(chat) -> torch.Tensor:
 # Audio Generation
 # ========================================
 
+
 def generate_audio(
     chat,
     text: str,
@@ -220,8 +230,8 @@ def generate_audio(
     output_path: str,
     speaker_file: Optional[str] = None,
     save_speaker_file: Optional[str] = None,
-    break_level: int = 5,
-    quiet: bool = False
+    break_level: int = 5,  # noqa: ARG001 - kept for API compatibility
+    quiet: bool = False,
 ) -> Tuple[np.ndarray, float]:
     """
     Generate audio using ChatTTS for a single text chunk.
@@ -233,7 +243,7 @@ def generate_audio(
         output_path: Output audio file path
         speaker_file: Optional speaker embedding file to load
         save_speaker_file: Optional file path to save speaker embedding
-        break_level: Pause strength at punctuation (0-7, default: 5)
+        break_level: Pause strength at punctuation (0-7, default: 5). Currently unused.
         quiet: Suppress progress messages
 
     Returns:
@@ -266,12 +276,6 @@ def generate_audio(
 
     if not quiet:
         print_info("Generating speech...")
-
-    # Refine parameters for controlling pause/break at punctuation
-    params_refine_text = CT.Chat.RefineTextParams(
-        prompt=f"[break_{break_level}]",
-        show_tqdm=not quiet,
-    )
 
     # Generate audio with skip_refine_text=True to avoid "narrow(): length must be non-negative" errors
     params_infer_code = CT.Chat.InferCodeParams(
@@ -311,8 +315,8 @@ def generate_audio_batch(
     texts: List[str],
     speed: int,
     spk: torch.Tensor,
-    break_level: int = 5,
-    quiet: bool = False
+    break_level: int = 5,  # noqa: ARG001 - kept for API compatibility
+    quiet: bool = False,
 ) -> List[np.ndarray]:
     """
     Generate audio for multiple text chunks in a batch.
@@ -324,7 +328,7 @@ def generate_audio_batch(
         texts: List of text chunks to convert
         speed: Speech speed (0-9)
         spk: Speaker embedding tensor
-        break_level: Pause strength at punctuation (0-7)
+        break_level: Pause strength at punctuation (0-7). Currently unused.
         quiet: Suppress progress messages
 
     Returns:
@@ -401,7 +405,12 @@ def generate_audio_batch(
                     do_text_normalization=False,
                     do_homophone_replacement=False,
                 )
-                if result and len(result) > 0 and result[0] is not None and len(result[0]) > 0:
+                if (
+                    result
+                    and len(result) > 0
+                    and result[0] is not None
+                    and len(result[0]) > 0
+                ):
                     audio_arrays[idx] = _convert_wav_to_int16(result[0])
                 elif not quiet:
                     print_info(f"Warning: Chunk {idx} failed to generate audio")

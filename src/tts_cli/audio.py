@@ -8,14 +8,16 @@ import numpy as np
 # Try to import numba for JIT optimization
 try:
     from numba import jit
+
     NUMBA_AVAILABLE = True
 except ImportError:
     NUMBA_AVAILABLE = False
 
     # Define dummy decorator if numba is not available
-    def jit(nopython=True):
+    def jit(nopython=True):  # type: ignore[misc]
         def decorator(func):
             return func
+
         return decorator
 
 
@@ -43,7 +45,7 @@ def float_to_int16(audio: np.ndarray) -> np.ndarray:
 def merge_audio_files(
     audio_arrays: List[np.ndarray],
     sample_rate: int = SAMPLE_RATE,
-    pause_duration: float = 0.7
+    pause_duration: float = 0.7,
 ) -> np.ndarray:
     """
     Merge multiple audio arrays into a single audio file.
@@ -78,7 +80,7 @@ def merge_with_pauses(
     paragraph_boundaries: List[int],
     sample_rate: int = SAMPLE_RATE,
     sentence_pause: float = 0.5,
-    paragraph_pause: float = 1.0
+    paragraph_pause: float = 1.0,
 ) -> np.ndarray:
     """
     Merge audio segments with different pause durations for sentences and paragraphs.
@@ -112,10 +114,16 @@ def merge_with_pauses(
 
         # Add sentences within this paragraph
         for sent_idx in range(para_start, para_end):
-            if audio_segments[sent_idx] is not None and len(audio_segments[sent_idx]) > 0:
+            if (
+                audio_segments[sent_idx] is not None
+                and len(audio_segments[sent_idx]) > 0
+            ):
                 # Add sentence pause before (except for first sentence in paragraph)
-                if sent_idx > para_start and final_segments and \
-                   not np.array_equal(final_segments[-1], paragraph_silence):
+                if (
+                    sent_idx > para_start
+                    and final_segments
+                    and not np.array_equal(final_segments[-1], paragraph_silence)
+                ):
                     final_segments.append(sentence_silence)
                 final_segments.append(audio_segments[sent_idx])
 

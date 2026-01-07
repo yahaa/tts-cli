@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from .core import TTSConfig, run_tts_with_subtitles
-from .utils import validate_speed, validate_language
+from .utils import validate_language, validate_speed
 
 
 def create_argument_parser() -> argparse.ArgumentParser:

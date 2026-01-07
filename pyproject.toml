@@ -72,3 +72,31 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "raise NotImplementedError",
 ]
+
+[tool.black]
+line-length = 88
+target-version = ["py39", "py310", "py311", "py312"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+    | \.venv
+    | venv
+    | build
+    | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "F",      # Pyflakes (unused imports, undefined names)
+    "I",      # isort (import sorting)
+]
+fixable = ["F401", "I"]  # Auto-fix unused imports and sort imports
+
+[tool.ruff.lint.isort]
+known-first-party = ["tts_cli"]

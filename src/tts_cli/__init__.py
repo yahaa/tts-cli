@@ -7,31 +7,31 @@ ChatTTS, with optional subtitle generation using Whisper.
 
 __version__ = "0.1.0"
 
-from .core import TTSConfig, run_tts_with_subtitles
-from .text_processor import (
-    split_text_intelligently,
-    split_paragraph_to_sentences,
-    normalize_text_for_tts,
-    detect_language,
-)
 from .audio import (
+    SAMPLE_RATE,
     float_to_int16,
+    get_audio_duration,
     merge_audio_files,
     merge_with_pauses,
     normalize_audio,
-    get_audio_duration,
-    SAMPLE_RATE,
 )
+from .core import TTSConfig, run_tts_with_subtitles
 from .subtitle import (
-    generate_subtitles,
     generate_srt_file,
+    generate_subtitles,
     parse_srt_file,
+)
+from .text_processor import (
+    detect_language,
+    normalize_text_for_tts,
+    split_paragraph_to_sentences,
+    split_text_intelligently,
 )
 from .utils import (
     format_timestamp,
-    validate_speed,
-    validate_language,
     read_text_from_file,
+    validate_language,
+    validate_speed,
 )
 
 __all__ = [

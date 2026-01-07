@@ -9,22 +9,40 @@ tts-cli is a local offline text-to-speech CLI tool that converts text to speech 
 ## Build and Development Commands
 
 ```bash
-# Install in development mode
-pip install -e .
+# Install development dependencies
+make install
 
-# Install with all optional dependencies
-pip install -e ".[all]"
+# Format code (Ruff)
+make format
+
+# Check code (lint)
+make lint
 
 # Run tests
-pytest
-
-# Run tests with coverage
-pytest --cov=tts_cli
+make test
 
 # Run the CLI
 tts-cli --text "Hello" --skip-subtitles
 python -m tts_cli --text "Hello" --skip-subtitles
 ```
+
+## Code Style
+
+This project uses **Ruff** for code formatting and linting:
+- Line length: 88 characters
+- Auto-fix unused imports on save
+- Auto-sort imports (isort style)
+
+Configuration is in `pyproject.toml` under `[tool.ruff]`.
+
+### VSCode Setup
+
+Recommended extensions (configured in `.vscode/settings.json`):
+- `ms-python.python` - Python support
+- `ms-python.vscode-pylance` - IntelliSense (type checking disabled)
+- `charliermarsh.ruff` - Formatting and linting
+
+Do NOT use: Pylint, autopep8, Black, isort, flake8 (redundant with Ruff)
 
 ## Project Structure
 

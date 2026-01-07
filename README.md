@@ -147,6 +147,36 @@ tts-cli 会自动规范化文本，但如果仍有问题，检查文本是否包
 - 减小 `--max-length` 参数
 - 使用 `--whisper-model tiny` 减小 Whisper 模型
 
+## 开发
+
+### VSCode 推荐插件
+
+本项目推荐使用以下 VSCode 插件：
+
+| 插件 | ID | 用途 |
+|------|-----|------|
+| Python | `ms-python.python` | Python 基础支持 |
+| Pylance | `ms-python.vscode-pylance` | 智能补全、跳转定义 |
+| Ruff | `charliermarsh.ruff` | 代码检查 + 格式化 |
+
+项目已配置 `.vscode/settings.json`，打开项目后会自动应用格式化规则。
+
+### 常用命令
+
+```bash
+# 安装开发依赖
+make install
+
+# 格式化代码
+make format
+
+# 检查代码
+make lint
+
+# 运行测试
+make test
+```
+
 ## License
 
 AGPLv3+

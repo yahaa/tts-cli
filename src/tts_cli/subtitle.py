@@ -26,29 +26,6 @@ def generate_srt_file(whisper_result: Dict, output_path: str) -> None:
             f.write("\n")
 
 
-def generate_srt_from_segments(
-    segments: list,
-    output_path: str
-) -> None:
-    """
-    Generate SRT file from a list of segments.
-
-    Args:
-        segments: List of dicts with 'start', 'end', 'text' keys
-        output_path: Output SRT file path
-    """
-    with open(output_path, "w", encoding="utf-8") as f:
-        for i, segment in enumerate(segments, 1):
-            start_time = format_timestamp(segment["start"])
-            end_time = format_timestamp(segment["end"])
-            text = segment["text"].strip()
-
-            f.write(f"{i}\n")
-            f.write(f"{start_time} --> {end_time}\n")
-            f.write(f"{text}\n")
-            f.write("\n")
-
-
 def generate_subtitles(
     audio_path: str,
     language: str,
@@ -56,7 +33,7 @@ def generate_subtitles(
     output_srt_path: str,
     output_json_path: Optional[str] = None,
     generate_json: bool = False,
-    quiet: bool = False
+    quiet: bool = False,
 ) -> Dict:
     """
     Generate SRT subtitles using Whisper.
@@ -95,7 +72,11 @@ def generate_subtitles(
 
     if not quiet:
         print_success("Recognition complete")
-        preview_text = result['text'][:100] + '...' if len(result['text']) > 100 else result['text']
+        preview_text = (
+            result["text"][:100] + "..."
+            if len(result["text"]) > 100
+            else result["text"]
+        )
         print_info(f"Recognized text: {preview_text}")
 
     # Generate SRT file
@@ -127,30 +108,25 @@ def parse_srt_file(srt_path: str) -> list:
     """
     segments = []
 
-    with open(srt_path, 'r', encoding='utf-8') as f:
+    with open(srt_path, "r", encoding="utf-8") as f:
         content = f.read()
 
     # Split by double newlines (segment separator)
-    blocks = content.strip().split('\n\n')
+    blocks = content.strip().split("\n\n")
 
     for block in blocks:
-        lines = block.strip().split('\n')
+        lines = block.strip().split("\n")
         if len(lines) >= 3:
             index = int(lines[0])
             time_line = lines[1]
-            text = '\n'.join(lines[2:])
+            text = "\n".join(lines[2:])
 
             # Parse time
-            start_str, end_str = time_line.split(' --> ')
+            start_str, end_str = time_line.split(" --> ")
             start = _parse_timestamp(start_str)
             end = _parse_timestamp(end_str)
 
-            segments.append({
-                'index': index,
-                'start': start,
-                'end': end,
-                'text': text
-            })
+            segments.append({"index": index, "start": start, "end": end, "text": text})
 
     return segments
 
@@ -166,8 +142,8 @@ def _parse_timestamp(ts: str) -> float:
         Time in seconds
     """
     # Handle both comma and period as decimal separator
-    ts = ts.replace(',', '.')
-    parts = ts.split(':')
+    ts = ts.replace(",", ".")
+    parts = ts.split(":")
     hours = int(parts[0])
     minutes = int(parts[1])
     seconds = float(parts[2])

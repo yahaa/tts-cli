@@ -1,27 +1,41 @@
 """Main workflow orchestrator for tts-cli."""
 
 from typing import Optional
-import numpy as np
+
 import scipy.io.wavfile as wavfile
 
 from .audio import (
-    float_to_int16, merge_with_pauses, normalize_audio,
-    get_audio_duration, SAMPLE_RATE
-)
-from .text_processor import (
-    split_text_intelligently, split_paragraph_to_sentences,
-    normalize_text_for_tts, split_and_merge_text, validate_text_for_chattts
-)
-from .tts import (
-    init_chat_tts, load_speaker, save_speaker, sample_random_speaker,
-    generate_audio, generate_audio_batch,
-    get_gpu_free_memory_mb, estimate_memory_per_chunk_mb, calculate_optimal_batch_size
+    SAMPLE_RATE,
+    get_audio_duration,
+    merge_with_pauses,
+    normalize_audio,
 )
 from .subtitle import generate_subtitles
+from .text_processor import (
+    normalize_text_for_tts,
+    split_and_merge_text,
+    validate_text_for_chattts,
+)
+from .tts import (
+    calculate_optimal_batch_size,
+    estimate_memory_per_chunk_mb,
+    generate_audio,
+    generate_audio_batch,
+    get_gpu_free_memory_mb,
+    init_chat_tts,
+    load_speaker,
+    sample_random_speaker,
+    save_speaker,
+)
 from .utils import (
-    read_text_from_file, check_dependencies,
-    print_header, print_step, print_info, print_success,
-    print_summary, print_final_paths_only
+    check_dependencies,
+    print_final_paths_only,
+    print_header,
+    print_info,
+    print_step,
+    print_success,
+    print_summary,
+    read_text_from_file,
 )
 
 
@@ -113,9 +127,13 @@ def run_tts_with_subtitles(config: TTSConfig) -> None:
     target_length = int(max_length * 0.75)  # Target 75% of max for flexibility
 
     if len(text) > target_length:
-        text_chunks = split_and_merge_text(text, target_length=target_length, max_length=max_length)
+        text_chunks = split_and_merge_text(
+            text, target_length=target_length, max_length=max_length
+        )
         if not config.quiet:
-            print_info(f"Text merged into {len(text_chunks)} chunks (target: {target_length} chars each)")
+            print_info(
+                f"Text merged into {len(text_chunks)} chunks (target: {target_length} chars each)"
+            )
     else:
         text_chunks = [text]
 
@@ -135,15 +153,12 @@ def run_tts_with_subtitles(config: TTSConfig) -> None:
             speaker_file=config.speaker,
             save_speaker_file=config.save_speaker,
             break_level=config.break_level,
-            quiet=config.quiet
+            quiet=config.quiet,
         )
     else:
         # Multiple chunks - batch processing with GPU parallelism
         duration = _generate_audio_multi_chunk(
-            chat=chat,
-            text_chunks=text_chunks,
-            config=config,
-            total_steps=total_steps
+            chat=chat, text_chunks=text_chunks, config=config, total_steps=total_steps
         )
 
     generated_files = [config.output_audio]
@@ -157,9 +172,11 @@ def run_tts_with_subtitles(config: TTSConfig) -> None:
         # Auto-derive SRT path if not specified
         output_srt = config.output_srt
         if output_srt is None:
-            output_srt = config.output_audio.replace('.wav', '.srt')
+            output_srt = config.output_audio.replace(".wav", ".srt")
 
-        output_json = output_srt.replace('.srt', '.json') if not config.no_json else None
+        output_json = (
+            output_srt.replace(".srt", ".json") if not config.no_json else None
+        )
 
         whisper_result = generate_subtitles(
             audio_path=config.output_audio,
@@ -168,7 +185,7 @@ def run_tts_with_subtitles(config: TTSConfig) -> None:
             output_srt_path=output_srt,
             output_json_path=output_json,
             generate_json=not config.no_json,
-            quiet=config.quiet
+            quiet=config.quiet,
         )
 
         generated_files.append(output_srt)
@@ -180,20 +197,17 @@ def run_tts_with_subtitles(config: TTSConfig) -> None:
         print_final_paths_only(generated_files)
     else:
         stats = {
-            'duration': duration,
-            'segments': len(whisper_result['segments']) if whisper_result else 0,
-            'characters': len(text),
-            'chars_per_sec': len(text) / duration if duration > 0 else 0,
-            'files': generated_files
+            "duration": duration,
+            "segments": len(whisper_result["segments"]) if whisper_result else 0,
+            "characters": len(text),
+            "chars_per_sec": len(text) / duration if duration > 0 else 0,
+            "files": generated_files,
         }
         print_summary(stats)
 
 
 def _generate_audio_multi_chunk(
-    chat,
-    text_chunks: list,
-    config: TTSConfig,
-    total_steps: int
+    chat, text_chunks: list, config: TTSConfig, total_steps: int
 ) -> float:
     """
     Generate audio for multiple text chunks with batch processing.
@@ -218,15 +232,17 @@ def _generate_audio_multi_chunk(
 
     # Calculate optimal batch size based on GPU memory
     batch_size = calculate_optimal_batch_size(
-        num_chunks=num_chunks,
-        chunk_chars=avg_chunk_chars,
-        max_batch=config.max_batch
+        num_chunks=num_chunks, chunk_chars=avg_chunk_chars, max_batch=config.max_batch
     )
 
     if not config.quiet:
         free_mem = get_gpu_free_memory_mb()
         mem_per_chunk = estimate_memory_per_chunk_mb(avg_chunk_chars)
-        print_step(1, total_steps, f"Generating audio ({num_chunks} chunks, avg {avg_chunk_chars} chars each)...")
+        print_step(
+            1,
+            total_steps,
+            f"Generating audio ({num_chunks} chunks, avg {avg_chunk_chars} chars each)...",
+        )
         print_info(f"GPU free memory: {free_mem:.0f} MB")
         print_info(f"Estimated memory per chunk: {mem_per_chunk:.0f} MB")
         print_info(f"Auto batch size: {batch_size}")
@@ -245,7 +261,9 @@ def _generate_audio_multi_chunk(
         for i, chunk in enumerate(text_chunks, 1):
             is_valid, invalid_chars = validate_text_for_chattts(chunk)
             if not is_valid:
-                print_info(f"Chunk {i}: {len(chunk)} chars [WARNING: invalid chars: {invalid_chars}]")
+                print_info(
+                    f"Chunk {i}: {len(chunk)} chars [WARNING: invalid chars: {invalid_chars}]"
+                )
             else:
                 print_info(f"Chunk {i}: {len(chunk)} chars [OK]")
 
@@ -259,7 +277,9 @@ def _generate_audio_multi_chunk(
         batch_chunks = text_chunks[start_idx:end_idx]
 
         if not config.quiet:
-            print_info(f"Processing batch {batch_idx + 1}/{num_batches} (chunks {start_idx + 1}-{end_idx})...")
+            print_info(
+                f"Processing batch {batch_idx + 1}/{num_batches} (chunks {start_idx + 1}-{end_idx})..."
+            )
 
         # Batch inference
         batch_audios = generate_audio_batch(
@@ -268,7 +288,7 @@ def _generate_audio_multi_chunk(
             speed=config.speed,
             spk=spk,
             break_level=config.break_level,
-            quiet=config.quiet
+            quiet=config.quiet,
         )
 
         # Store results
@@ -284,8 +304,8 @@ def _generate_audio_multi_chunk(
         audio_segments=chunk_audios,
         paragraph_boundaries=list(range(num_chunks + 1)),  # Each chunk is a "paragraph"
         sample_rate=SAMPLE_RATE,
-        sentence_pause=0.3,   # Shorter pause (sentences already have [uv_break])
-        paragraph_pause=0.8   # Pause between chunks
+        sentence_pause=0.3,  # Shorter pause (sentences already have [uv_break])
+        paragraph_pause=0.8,  # Pause between chunks
     )
 
     # Final normalization

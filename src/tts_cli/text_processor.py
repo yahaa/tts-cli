@@ -17,9 +17,9 @@ DEFAULT_MAX_LENGTH = 500
 DEFAULT_MIN_TAIL_LENGTH = 200
 
 # Sentence ending punctuation patterns
-SENTENCE_END_PATTERN_EN = r'[.!?]'
-SENTENCE_END_PATTERN_ZH = r'[。！？]'
-SENTENCE_END_PATTERN = r'[.!?。！？]'
+SENTENCE_END_PATTERN_EN = r"[.!?]"
+SENTENCE_END_PATTERN_ZH = r"[。！？]"
+SENTENCE_END_PATTERN = r"[.!?。！？]"
 
 
 def normalize_text_for_tts(text: str) -> str:
@@ -43,47 +43,78 @@ def normalize_text_for_tts(text: str) -> str:
     """
     # Step 0: Unicode NFKC normalization to convert lookalike characters
     # This converts fullwidth ASCII, compatibility chars, etc. to standard forms
-    text = unicodedata.normalize('NFKC', text)
+    text = unicodedata.normalize("NFKC", text)
 
     # Step 1: Convert numbers to words
     num_to_word = {
-        '0': 'zero', '1': 'one', '2': 'two', '3': 'three', '4': 'four',
-        '5': 'five', '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine'
+        "0": "zero",
+        "1": "one",
+        "2": "two",
+        "3": "three",
+        "4": "four",
+        "5": "five",
+        "6": "six",
+        "7": "seven",
+        "8": "eight",
+        "9": "nine",
     }
 
     # Replace common year patterns
-    text = text.replace('2026', 'twenty twenty six')
-    text = text.replace('2025', 'twenty twenty five')
-    text = text.replace('2024', 'twenty twenty four')
-    text = text.replace('2023', 'twenty twenty three')
+    text = text.replace("2026", "twenty twenty six")
+    text = text.replace("2025", "twenty twenty five")
+    text = text.replace("2024", "twenty twenty four")
+    text = text.replace("2023", "twenty twenty three")
 
     # Replace multi-digit numbers
     def replace_number(match):
         num = int(match.group(0))
         if num <= 20:
-            words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven',
-                    'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen',
-                    'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen',
-                    'nineteen', 'twenty']
+            words = [
+                "zero",
+                "one",
+                "two",
+                "three",
+                "four",
+                "five",
+                "six",
+                "seven",
+                "eight",
+                "nine",
+                "ten",
+                "eleven",
+                "twelve",
+                "thirteen",
+                "fourteen",
+                "fifteen",
+                "sixteen",
+                "seventeen",
+                "eighteen",
+                "nineteen",
+                "twenty",
+            ]
             return words[num]
-        return ' '.join(num_to_word[d] for d in str(num))
+        return " ".join(num_to_word[d] for d in str(num))
 
-    text = re.sub(r'\b\d+\b', replace_number, text)
+    text = re.sub(r"\b\d+\b", replace_number, text)
 
-    # Step 2: Convert punctuation - remove ? entirely as ChatTTS doesn't support it
+    # Step 2: Convert punctuation
+    # ChatTTS only supports: 。，and space
+    # All other punctuation must be converted
     punctuation_map = {
-        # Question marks - REMOVE (ChatTTS reports "found invalid characters: {'?'}")
-        '?': '，',   # Replace with comma for a pause
-        '？': '，',  # Full-width too
+        # Question marks -> comma
+        "?": "，",
+        "？": "，",
+        # Exclamation marks -> period (ChatTTS doesn't support ！)
+        "!": "。",
+        "！": "。",
         # Half-width to full-width
-        '.': '。',
-        ',': '，',
-        '!': '！',
-        ';': '，',
-        ':': '，',
+        ".": "。",
+        ",": "，",
+        ";": "，",
+        ":": "，",
         # Ellipsis
-        '…': '。',
-        '⋯': '。',
+        "…": "。",
+        "⋯": "。",
     }
 
     for old, new in punctuation_map.items():
@@ -95,23 +126,23 @@ def normalize_text_for_tts(text: str) -> str:
         if char.isascii() and char.isalpha():
             # English letters a-z, A-Z
             result.append(char)
-        elif '\u4e00' <= char <= '\u9fff':
+        elif "\u4e00" <= char <= "\u9fff":
             # Chinese characters
             result.append(char)
-        elif char in '。，！':
-            # Chinese punctuation (NO question mark - not supported)
+        elif char in "。，":
+            # Chinese punctuation (only period and comma are supported)
             result.append(char)
-        elif char == ' ' or char == '\n':
+        elif char == " " or char == "\n":
             # Whitespace
-            result.append(' ')
+            result.append(" ")
         else:
             # Everything else becomes space
-            result.append(' ')
+            result.append(" ")
 
-    text = ''.join(result)
+    text = "".join(result)
 
     # Step 4: Clean up multiple spaces
-    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r"\s+", " ", text)
 
     return text.strip()
 
@@ -127,10 +158,10 @@ def validate_text_for_chattts(text: str) -> tuple:
     for char in text:
         if char.isascii() and char.isalpha():
             continue  # a-z, A-Z
-        elif '\u4e00' <= char <= '\u9fff':
+        elif "\u4e00" <= char <= "\u9fff":
             continue  # Chinese
-        elif char in '。，！ ':
-            continue  # Allowed punctuation and space (no ? - not supported)
+        elif char in "。， ":
+            continue  # Allowed punctuation and space (only 。，supported)
         else:
             invalid_chars.add(char)
 
@@ -140,7 +171,7 @@ def validate_text_for_chattts(text: str) -> tuple:
 def split_text_intelligently(
     text: str,
     max_length: int = DEFAULT_MAX_LENGTH,
-    min_tail_length: int = DEFAULT_MIN_TAIL_LENGTH
+    min_tail_length: int = DEFAULT_MIN_TAIL_LENGTH,
 ) -> List[str]:
     """
     Split long text into smaller chunks by paragraphs and sentences.
@@ -166,7 +197,7 @@ def split_text_intelligently(
         return [text]
 
     # Step 1: Split by paragraphs (one or more newlines)
-    paragraphs = re.split(r'\n+', text)
+    paragraphs = re.split(r"\n+", text)
 
     chunks = []
 
@@ -189,8 +220,8 @@ def split_text_intelligently(
 
             if last_end > 0:
                 # Split at the last sentence ending
-                chunk = remaining[:last_end + 1].strip()
-                remaining = remaining[last_end + 1:].strip()
+                chunk = remaining[: last_end + 1].strip()
+                remaining = remaining[last_end + 1 :].strip()
                 chunks.append(chunk)
             else:
                 # No sentence ending found, force split at max_length
@@ -245,20 +276,20 @@ def split_paragraph_to_sentences(text: str) -> List[str]:
     # 1. Punctuation followed by whitespace (English style)
     # 2. Chinese punctuation (may not have following whitespace)
     # Using lookbehind to keep the punctuation with the sentence
-    sentences = re.split(r'(?<=[.!?])\s+|(?<=[。！？])', text)
+    sentences = re.split(r"(?<=[.!?])\s+|(?<=[。！？])", text)
     return [s.strip() for s in sentences if s.strip()]
 
 
 # Sentence separator - just use space, punctuation already provides natural pauses
 # [uv_break] contains invalid characters ([, ], _) that ChatTTS rejects
-CHATTTS_PAUSE_MARKER = ' '
+CHATTTS_PAUSE_MARKER = " "
 
 
 def merge_sentences_to_chunks(
     sentences: List[str],
     target_length: int = 400,
     max_length: int = 500,
-    min_sentence_length: int = 10
+    min_sentence_length: int = 10,
 ) -> List[str]:
     """
     Merge sentences into larger chunks for more efficient TTS processing.
@@ -297,7 +328,11 @@ def merge_sentences_to_chunks(
             chunks.append(CHATTTS_PAUSE_MARKER.join(current_chunk))
             current_chunk = [sentence]
             current_length = sentence_len
-        elif current_chunk and current_length >= target_length and sentence_len >= min_sentence_length:
+        elif (
+            current_chunk
+            and current_length >= target_length
+            and sentence_len >= min_sentence_length
+        ):
             # Current chunk reached target and next sentence is long enough to stand alone
             chunks.append(CHATTTS_PAUSE_MARKER.join(current_chunk))
             current_chunk = [sentence]
@@ -315,9 +350,7 @@ def merge_sentences_to_chunks(
 
 
 def split_and_merge_text(
-    text: str,
-    target_length: int = 400,
-    max_length: int = 500
+    text: str, target_length: int = 400, max_length: int = 500
 ) -> List[str]:
     """
     Split text into sentences and merge them into optimal chunks.
@@ -335,7 +368,7 @@ def split_and_merge_text(
         List of text chunks ready for TTS
     """
     # First split by paragraphs
-    paragraphs = re.split(r'\n+', text)
+    paragraphs = re.split(r"\n+", text)
 
     all_chunks = []
     for para in paragraphs:
@@ -350,29 +383,11 @@ def split_and_merge_text(
 
         # Merge sentences into chunks
         chunks = merge_sentences_to_chunks(
-            sentences,
-            target_length=target_length,
-            max_length=max_length
+            sentences, target_length=target_length, max_length=max_length
         )
         all_chunks.extend(chunks)
 
     return all_chunks
-
-
-def estimate_text_length(text: str) -> int:
-    """
-    Estimate the "effective" length of text for TTS.
-
-    Chinese characters are typically shorter in audio duration than English words,
-    but for simplicity we use character count.
-
-    Args:
-        text: Input text
-
-    Returns:
-        Estimated length
-    """
-    return len(text)
 
 
 def detect_language(text: str) -> str:
@@ -386,13 +401,13 @@ def detect_language(text: str) -> str:
         'zh' for Chinese, 'en' for English
     """
     # Count Chinese characters
-    chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', text))
-    total_chars = len(text.replace(' ', ''))
+    chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", text))
+    total_chars = len(text.replace(" ", ""))
 
     if total_chars == 0:
-        return 'en'
+        return "en"
 
     # If more than 30% Chinese characters, consider it Chinese
     if chinese_chars / total_chars > 0.3:
-        return 'zh'
-    return 'en'
+        return "zh"
+    return "en"
