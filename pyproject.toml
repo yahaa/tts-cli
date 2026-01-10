@@ -35,6 +35,12 @@ dependencies = [
 [project.optional-dependencies]
 subtitle = ["openai-whisper"]
 fast = ["numba"]
+server = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "motor>=3.3.0",
+    "httpx>=0.24.0",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -44,10 +50,15 @@ all = [
     "numba",
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "motor>=3.3.0",
+    "httpx>=0.24.0",
 ]
 
 [project.scripts]
 tts-cli = "tts_cli.cli:main"
+tts-server = "tts_cli.server.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/yahaa/tts-cli"
