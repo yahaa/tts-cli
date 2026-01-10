@@ -144,6 +144,16 @@ tts-server --port 8000 --mongodb-uri mongodb://localhost:27017
 tts-cli serve --port 8000 --mongodb-uri mongodb://localhost:27017
 ```
 
+### API 文档
+
+启动服务后，可以通过以下地址访问 API 文档：
+
+| 地址 | 说明 |
+|------|------|
+| http://localhost:8000/docs | Swagger UI 交互式文档 |
+| http://localhost:8000/redoc | ReDoc 文档 |
+| http://localhost:8000/openapi.json | OpenAPI JSON Schema |
+
 ### Server 参数说明
 
 | 参数 | 说明 | 默认值 |

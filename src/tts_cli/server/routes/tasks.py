@@ -25,9 +25,25 @@ def set_task_manager(manager: TaskManager) -> None:
     task_manager = manager
 
 
-@router.post("/create_tts_task", response_model=CreateTtsTaskResponse)
+@router.post(
+    "/create_tts_task",
+    response_model=CreateTtsTaskResponse,
+    summary="创建 TTS 任务",
+    description="""
+创建一个异步的文字转语音任务。
+
+任务创建后会立即返回任务 ID，可以通过 `/describe_tts_task` 接口查询任务状态。
+
+### 支持的功能
+- 中英文语音合成
+- 自动字幕生成（基于 Whisper）
+- 自定义语速和停顿
+- 说话人音色复用
+- 任务完成回调通知
+    """,
+)
 async def create_tts_task(request: CreateTtsTaskRequest):
-    """Create a new TTS task."""
+    """创建 TTS 任务"""
     if task_manager is None:
         raise HTTPException(status_code=500, detail="Server not initialized")
 
@@ -52,9 +68,29 @@ async def create_tts_task(request: CreateTtsTaskRequest):
     )
 
 
-@router.get("/describe_tts_task", response_model=DescribeTtsTaskResponse)
-async def describe_tts_task(task_id: str = Query(..., description="Task ID")):
-    """Query task status and results."""
+@router.get(
+    "/describe_tts_task",
+    response_model=DescribeTtsTaskResponse,
+    summary="查询任务状态",
+    description="""
+查询 TTS 任务的处理状态和结果。
+
+### 任务状态说明
+| 状态 | 说明 |
+|------|------|
+| `waiting` | 任务已创建，等待处理 |
+| `processing` | 任务正在处理中 |
+| `success` | 任务处理成功，可下载文件 |
+| `failed` | 任务处理失败，查看错误信息 |
+
+### 轮询建议
+建议每 2-5 秒查询一次任务状态，避免频繁请求。
+    """,
+)
+async def describe_tts_task(
+    task_id: str = Query(..., description="任务 ID", examples=["task_xyz789abc"]),
+):
+    """查询任务状态"""
     if task_manager is None:
         raise HTTPException(status_code=500, detail="Server not initialized")
 

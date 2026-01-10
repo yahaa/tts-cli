@@ -87,11 +87,65 @@ def create_app(config: ServerConfig) -> FastAPI:
 
         logger.info("TTS server stopped")
 
+    # OpenAPI tags metadata
+    tags_metadata = [
+        {
+            "name": "tasks",
+            "description": "TTS 任务管理接口，用于创建和查询语音合成任务",
+        },
+        {
+            "name": "files",
+            "description": "文件下载接口，用于下载生成的音频和字幕文件",
+        },
+        {
+            "name": "health",
+            "description": "健康检查接口，用于监控服务状态",
+        },
+    ]
+
     app = FastAPI(
-        title="TTS CLI Server",
-        description="Text-to-Speech API server with async task processing",
+        title="TTS Server API",
+        description="""
+## TTS Server - 文字转语音服务 API
+
+基于 ChatTTS 的异步文字转语音服务，支持中英文语音合成和字幕生成。
+
+### 功能特性
+
+- **异步任务处理**：提交任务后立即返回，通过轮询或回调获取结果
+- **中英文支持**：支持中文和英文语音合成
+- **字幕生成**：基于 Whisper 自动生成 SRT 字幕
+- **音色复用**：支持保存和复用说话人音色
+
+### 使用流程
+
+1. 调用 `POST /api/v1/create_tts_task` 创建任务
+2. 调用 `GET /api/v1/describe_tts_task` 查询任务状态
+3. 任务完成后，调用 `GET /api/v1/files/{task_id}/output.wav` 下载音频
+
+### 任务状态
+
+| 状态 | 说明 |
+|------|------|
+| `waiting` | 任务已创建，等待处理 |
+| `processing` | 任务正在处理中 |
+| `success` | 任务处理成功 |
+| `failed` | 任务处理失败 |
+        """,
         version=__version__,
         lifespan=lifespan,
+        openapi_tags=tags_metadata,
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        license_info={
+            "name": "AGPLv3+",
+            "url": "https://www.gnu.org/licenses/agpl-3.0.html",
+        },
+        contact={
+            "name": "tts-cli",
+            "url": "https://github.com/yahaa/tts-cli",
+        },
     )
 
     # Register routes
