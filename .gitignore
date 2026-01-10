@@ -47,3 +47,5 @@ htmlcov/
 *.srt
 *.pt
 *.bt
+.ruff_cache
+.playwright-mcp
