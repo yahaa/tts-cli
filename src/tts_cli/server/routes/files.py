@@ -26,9 +26,30 @@ def set_output_dir(path: str) -> None:
     output_dir = path
 
 
-@router.get("/files/{task_id}/{filename}")
+@router.get(
+    "/files/{task_id}/{filename}",
+    summary="下载文件",
+    description="""
+下载任务生成的音频或字幕文件。
+
+### 可下载的文件
+| 文件名 | 类型 | 说明 |
+|--------|------|------|
+| `output.wav` | audio/wav | 生成的音频文件 |
+| `output.srt` | text/plain | 生成的 SRT 字幕文件 |
+
+### 注意事项
+- 只有状态为 `success` 的任务才能下载文件
+- 文件会在任务完成后保留一段时间（默认 24 小时）
+    """,
+    responses={
+        200: {"description": "文件内容"},
+        400: {"description": "任务未完成"},
+        404: {"description": "任务或文件不存在"},
+    },
+)
 async def download_file(task_id: str, filename: str):
-    """Download generated audio or subtitle file."""
+    """下载文件"""
     if task_manager is None:
         raise HTTPException(status_code=500, detail="Server not initialized")
 
