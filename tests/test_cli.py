@@ -135,8 +135,40 @@ class TestArgumentParser:
         args = parser.parse_args(["--text", "test", "--no-json"])
         assert args.no_json is True
 
-    def test_require_input(self):
-        """Either --text or --file is required."""
+    def test_no_args_shows_help(self):
+        """No arguments should parse successfully (shows help)."""
         parser = create_argument_parser()
-        with pytest.raises(SystemExit):
-            parser.parse_args([])
+        args = parser.parse_args([])
+        # When no subcommand or input is provided, command is None
+        assert args.command is None
+        assert args.text is None
+        assert args.input_file is None
+
+    def test_generate_subcommand(self):
+        """generate subcommand should work."""
+        parser = create_argument_parser()
+        args = parser.parse_args(["generate", "--text", "Hello"])
+        assert args.command == "generate"
+        assert args.text == "Hello"
+
+    def test_serve_subcommand(self):
+        """serve subcommand should work."""
+        parser = create_argument_parser()
+        args = parser.parse_args(["serve"])
+        assert args.command == "serve"
+        assert args.port == 8000
+        assert args.host == "0.0.0.0"
+
+    def test_serve_with_options(self):
+        """serve subcommand with options should work."""
+        parser = create_argument_parser()
+        args = parser.parse_args([
+            "serve",
+            "--port", "9000",
+            "--mongodb-uri", "mongodb://db:27017",
+            "--db-name", "custom-db",
+        ])
+        assert args.command == "serve"
+        assert args.port == 9000
+        assert args.mongodb_uri == "mongodb://db:27017"
+        assert args.db_name == "custom-db"
