@@ -49,3 +49,4 @@ htmlcov/
 *.bt
 .ruff_cache
 .playwright-mcp
+pkg/
