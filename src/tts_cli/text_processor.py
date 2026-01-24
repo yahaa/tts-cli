@@ -1,8 +1,8 @@
 """Text processing utilities for tts-cli.
 
-This module handles text splitting and normalization for ChatTTS.
-Key consideration: ChatTTS produces lower quality audio for long texts,
-so intelligent splitting is critical.
+This module handles text splitting and normalization for Qwen-TTS.
+Key consideration: Qwen-TTS handles longer texts than ChatTTS but still benefits
+from intelligent splitting for GPU memory management and audio quality.
 """
 
 import re
@@ -10,11 +10,11 @@ import unicodedata
 from typing import List
 
 # Default maximum length for each chunk (characters)
-# Smaller chunks are more reliable for ChatTTS generation
-DEFAULT_MAX_LENGTH = 500
+# Qwen-TTS can handle longer chunks than ChatTTS
+DEFAULT_MAX_LENGTH = 1000
 
 # Minimum length for the last chunk to avoid quality issues
-DEFAULT_MIN_TAIL_LENGTH = 200
+DEFAULT_MIN_TAIL_LENGTH = 300
 
 # Sentence ending punctuation patterns
 SENTENCE_END_PATTERN_EN = r"[.!?]"
@@ -24,148 +24,25 @@ SENTENCE_END_PATTERN = r"[.!?。！？]"
 
 def normalize_text_for_tts(text: str) -> str:
     """
-    Normalize text for ChatTTS compatibility.
+    Normalize text for Qwen-TTS.
 
-    ChatTTS has a very limited character set. This function aggressively
-    converts or removes unsupported characters to prevent generation failures.
-
-    Confirmed supported:
-    - English letters (a-z, A-Z)
-    - Chinese characters (U+4E00-U+9FFF)
-    - Chinese punctuation: 。，！？
-    - Space
+    Qwen-TTS supports a much wider character set than ChatTTS,
+    so we only do basic Unicode normalization.
 
     Args:
         text: Input text
 
     Returns:
-        Normalized text safe for ChatTTS
+        Normalized text
     """
-    # Step 0: Unicode NFKC normalization to convert lookalike characters
+    # Unicode NFKC normalization (convert lookalike characters)
     # This converts fullwidth ASCII, compatibility chars, etc. to standard forms
     text = unicodedata.normalize("NFKC", text)
 
-    # Step 1: Convert numbers to words
-    num_to_word = {
-        "0": "zero",
-        "1": "one",
-        "2": "two",
-        "3": "three",
-        "4": "four",
-        "5": "five",
-        "6": "six",
-        "7": "seven",
-        "8": "eight",
-        "9": "nine",
-    }
-
-    # Replace common year patterns
-    text = text.replace("2026", "twenty twenty six")
-    text = text.replace("2025", "twenty twenty five")
-    text = text.replace("2024", "twenty twenty four")
-    text = text.replace("2023", "twenty twenty three")
-
-    # Replace multi-digit numbers
-    def replace_number(match):
-        num = int(match.group(0))
-        if num <= 20:
-            words = [
-                "zero",
-                "one",
-                "two",
-                "three",
-                "four",
-                "five",
-                "six",
-                "seven",
-                "eight",
-                "nine",
-                "ten",
-                "eleven",
-                "twelve",
-                "thirteen",
-                "fourteen",
-                "fifteen",
-                "sixteen",
-                "seventeen",
-                "eighteen",
-                "nineteen",
-                "twenty",
-            ]
-            return words[num]
-        return " ".join(num_to_word[d] for d in str(num))
-
-    text = re.sub(r"\b\d+\b", replace_number, text)
-
-    # Step 2: Convert punctuation
-    # ChatTTS only supports: 。，and space
-    # All other punctuation must be converted
-    punctuation_map = {
-        # Question marks -> comma
-        "?": "，",
-        "？": "，",
-        # Exclamation marks -> period (ChatTTS doesn't support ！)
-        "!": "。",
-        "！": "。",
-        # Half-width to full-width
-        ".": "。",
-        ",": "，",
-        ";": "，",
-        ":": "，",
-        # Ellipsis
-        "…": "。",
-        "⋯": "。",
-    }
-
-    for old, new in punctuation_map.items():
-        text = text.replace(old, new)
-
-    # Step 3: Only keep confirmed supported characters
-    result = []
-    for char in text:
-        if char.isascii() and char.isalpha():
-            # English letters a-z, A-Z
-            result.append(char)
-        elif "\u4e00" <= char <= "\u9fff":
-            # Chinese characters
-            result.append(char)
-        elif char in "。，":
-            # Chinese punctuation (only period and comma are supported)
-            result.append(char)
-        elif char == " " or char == "\n":
-            # Whitespace
-            result.append(" ")
-        else:
-            # Everything else becomes space
-            result.append(" ")
-
-    text = "".join(result)
-
-    # Step 4: Clean up multiple spaces
+    # Clean up multiple spaces
     text = re.sub(r"\s+", " ", text)
 
     return text.strip()
-
-
-def validate_text_for_chattts(text: str) -> tuple:
-    """
-    Validate that text only contains ChatTTS-supported characters.
-
-    Returns:
-        Tuple of (is_valid, invalid_chars)
-    """
-    invalid_chars = set()
-    for char in text:
-        if char.isascii() and char.isalpha():
-            continue  # a-z, A-Z
-        elif "\u4e00" <= char <= "\u9fff":
-            continue  # Chinese
-        elif char in "。， ":
-            continue  # Allowed punctuation and space (only 。，supported)
-        else:
-            invalid_chars.add(char)
-
-    return (len(invalid_chars) == 0, invalid_chars)
 
 
 def split_text_intelligently(
@@ -281,8 +158,7 @@ def split_paragraph_to_sentences(text: str) -> List[str]:
 
 
 # Sentence separator - just use space, punctuation already provides natural pauses
-# [uv_break] contains invalid characters ([, ], _) that ChatTTS rejects
-CHATTTS_PAUSE_MARKER = " "
+PAUSE_MARKER = " "
 
 
 def merge_sentences_to_chunks(
@@ -320,12 +196,12 @@ def merge_sentences_to_chunks(
 
         sentence_len = len(sentence)
         # Account for pause marker length when merging
-        marker_len = len(CHATTTS_PAUSE_MARKER) if current_chunk else 0
+        marker_len = len(PAUSE_MARKER) if current_chunk else 0
         new_length = current_length + marker_len + sentence_len
 
         if current_chunk and new_length > max_length:
             # Current chunk is full, save it and start new one
-            chunks.append(CHATTTS_PAUSE_MARKER.join(current_chunk))
+            chunks.append(PAUSE_MARKER.join(current_chunk))
             current_chunk = [sentence]
             current_length = sentence_len
         elif (
@@ -334,7 +210,7 @@ def merge_sentences_to_chunks(
             and sentence_len >= min_sentence_length
         ):
             # Current chunk reached target and next sentence is long enough to stand alone
-            chunks.append(CHATTTS_PAUSE_MARKER.join(current_chunk))
+            chunks.append(PAUSE_MARKER.join(current_chunk))
             current_chunk = [sentence]
             current_length = sentence_len
         else:
@@ -344,7 +220,7 @@ def merge_sentences_to_chunks(
 
     # Don't forget the last chunk
     if current_chunk:
-        chunks.append(CHATTTS_PAUSE_MARKER.join(current_chunk))
+        chunks.append(PAUSE_MARKER.join(current_chunk))
 
     return chunks
 

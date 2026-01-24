@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tts-cli"
-version = "0.1.0"
-description = "A local offline text-to-speech CLI tool with subtitle generation"
+version = "0.2.0"
+description = "Local offline text-to-speech CLI using Qwen3-TTS with voice cloning"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"
 authors = [
     {name = "yahaa"}
 ]
-keywords = ["tts", "text-to-speech", "ChatTTS", "subtitle", "srt"]
+keywords = ["tts", "text-to-speech", "Qwen3-TTS", "voice-cloning", "subtitle", "srt"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -25,16 +25,16 @@ classifiers = [
     "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 dependencies = [
-    "ChatTTS",
+    "qwen-tts",
     "torch",
     "numpy",
     "scipy",
-    "transformers<4.54",  # ChatTTS has issues with transformers>=4.54
 ]
 
 [project.optional-dependencies]
 subtitle = ["openai-whisper"]
 fast = ["numba"]
+flashattn = ["flash-attn"]  # Requires torch pre-installed, install separately if needed
 server = [
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.23.0",

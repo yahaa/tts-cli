@@ -136,63 +136,55 @@ class TestFindLastSentenceEnd:
 
 
 class TestNormalizeTextForTts:
-    """Tests for normalize_text_for_tts function."""
+    """Tests for normalize_text_for_tts function (simplified for Qwen-TTS)."""
 
-    def test_number_to_word(self):
-        """Single digits should be converted to words."""
-        text = "I have 3 apples"
+    def test_unicode_normalization(self):
+        """Unicode characters should be normalized to standard forms."""
+        text = "Ｈｅｌｌｏ"  # Fullwidth ASCII
         result = normalize_text_for_tts(text)
-        assert "three" in result
-
-    def test_year_conversion(self):
-        """Years should be converted to words."""
-        text = "In 2024"
-        result = normalize_text_for_tts(text)
-        assert "twenty twenty four" in result
-
-    def test_remove_special_quotes(self):
-        """Special quotes should be removed or simplified."""
-        text = '"Hello"'
-        result = normalize_text_for_tts(text)
-        assert '"' not in result
-        assert '"' not in result
-
-    def test_em_dash_to_space(self):
-        """Em-dash should be converted to space."""
-        text = "Hello—world"
-        result = normalize_text_for_tts(text)
-        assert "—" not in result
-        assert "Hello" in result
-        assert "world" in result
-
-    def test_hyphen_to_space(self):
-        """Hyphen should be converted to space."""
-        text = "command-line"
-        result = normalize_text_for_tts(text)
-        assert "-" not in result
-        assert "command" in result
-        assert "line" in result
+        assert result == "Hello"
 
     def test_multiple_spaces(self):
         """Multiple spaces should be collapsed."""
         text = "Hello    world"
         result = normalize_text_for_tts(text)
         assert "    " not in result
-
-    def test_only_allowed_chars_remain(self):
-        """Only allowed characters should remain."""
-        text = "Hello @world #test 123!"
-        result = normalize_text_for_tts(text)
-        assert "@" not in result
-        assert "#" not in result
-        # Numbers should be converted to words
-        assert "one two three" in result
+        assert result == "Hello world"
 
     def test_chinese_text_preserved(self):
         """Chinese characters should be preserved."""
         text = "你好世界"
         result = normalize_text_for_tts(text)
         assert result == "你好世界"
+
+    def test_numbers_preserved(self):
+        """Numbers should be preserved (Qwen-TTS supports numbers)."""
+        text = "I have 3 apples in 2024"
+        result = normalize_text_for_tts(text)
+        assert "3" in result
+        assert "2024" in result
+
+    def test_punctuation_preserved(self):
+        """Punctuation should be preserved (Qwen-TTS supports it)."""
+        text = "Hello, world! How are you?"
+        result = normalize_text_for_tts(text)
+        assert "," in result
+        assert "!" in result
+        assert "?" in result
+
+    def test_special_chars_preserved(self):
+        """Special characters are preserved (Qwen-TTS has wide support)."""
+        text = "Hello @world #test"
+        result = normalize_text_for_tts(text)
+        assert "@" in result
+        assert "#" in result
+
+    def test_whitespace_normalization(self):
+        """Mixed whitespace should be normalized."""
+        text = "Hello\t\tworld\n\ntest"
+        result = normalize_text_for_tts(text)
+        # Newlines and tabs converted to spaces, then collapsed
+        assert result == "Hello world test"
 
 
 class TestDetectLanguage:

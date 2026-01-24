@@ -1,5 +1,6 @@
 """Main workflow orchestrator for tts-cli."""
 
+from dataclasses import dataclass
 from typing import Optional
 
 import scipy.io.wavfile as wavfile
@@ -14,7 +15,6 @@ from .subtitle import generate_subtitles
 from .text_processor import (
     normalize_text_for_tts,
     split_and_merge_text,
-    validate_text_for_chattts,
 )
 from .tts import (
     calculate_optimal_batch_size,
@@ -39,6 +39,20 @@ from .utils import (
 )
 
 
+@dataclass
+class VoiceConfig:
+    """Voice configuration for Qwen-TTS."""
+
+    mode: str = "custom"
+    speaker: Optional[str] = "Ryan"
+    voice_description: Optional[str] = None
+    reference_audio: Optional[str] = None
+    reference_text: Optional[str] = None
+    voice_prompt_file: Optional[str] = None
+    save_voice_prompt_path: Optional[str] = None
+    instruct: Optional[str] = None
+
+
 class TTSConfig:
     """Configuration for TTS generation."""
 
@@ -54,12 +68,13 @@ class TTSConfig:
         speaker: Optional[str] = None,
         save_speaker: Optional[str] = None,
         max_length: Optional[int] = None,
-        max_batch: int = 1,
+        max_batch: int = 4,  # Qwen-TTS default batch size
         no_normalize: bool = False,
         whisper_model: str = "base",
         skip_subtitles: bool = False,
         no_json: bool = True,
         quiet: bool = False,
+        voice: Optional[VoiceConfig] = None,
     ):
         self.text = text
         self.input_file = input_file
@@ -77,6 +92,7 @@ class TTSConfig:
         self.skip_subtitles = skip_subtitles
         self.no_json = no_json
         self.quiet = quiet
+        self.voice = voice or VoiceConfig(speaker="Ryan")
 
 
 def run_tts_with_subtitles(config: TTSConfig) -> None:
@@ -122,8 +138,8 @@ def run_tts_with_subtitles(config: TTSConfig) -> None:
     chat = init_chat_tts(quiet=config.quiet)
 
     # 6. Split and merge text into optimal chunks
-    # Each chunk will be ~600-800 chars with [uv_break] markers between sentences
-    max_length = config.max_length or 800
+    # Qwen-TTS can handle longer chunks than ChatTTS
+    max_length = config.max_length or 1000
     target_length = int(max_length * 0.75)  # Target 75% of max for flexibility
 
     if len(text) > target_length:
@@ -259,13 +275,7 @@ def _generate_audio_multi_chunk(
 
     if not config.quiet:
         for i, chunk in enumerate(text_chunks, 1):
-            is_valid, invalid_chars = validate_text_for_chattts(chunk)
-            if not is_valid:
-                print_info(
-                    f"Chunk {i}: {len(chunk)} chars [WARNING: invalid chars: {invalid_chars}]"
-                )
-            else:
-                print_info(f"Chunk {i}: {len(chunk)} chars [OK]")
+            print_info(f"Chunk {i}: {len(chunk)} chars")
 
     # Process all chunks in batches
     chunk_audios = [None] * num_chunks

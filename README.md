@@ -1,21 +1,55 @@
 # tts-cli
 
-tts-cli 是一个本地离线使用的文字转语音命令行工具，基于 ChatTTS 和 Whisper。
+tts-cli 是一个本地离线使用的文字转语音命令行工具，基于 Qwen3-TTS 和 Whisper。
+
+## ⚠️ v0.2.0 重大更新
+
+**底层引擎已从 ChatTTS 升级到 Qwen3-TTS**，带来诸多新特性但包含破坏性变更。
+
+- 🔴 **重要**: `.pt` 音色文件不再兼容，请查看 [迁移指南](MIGRATION.md)
+- ✅ 新增声音克隆功能（3 秒音频即可克隆）
+- ✅ 9 种高级预设音色
+- ✅ 支持 10 种语言
+- ✅ 更长文本处理能力（1000 字符/块）
+
+详细迁移说明请查看: **[MIGRATION.md](MIGRATION.md)**
 
 ## 特性
 
-- 完全本地运行，无需网络，保障隐私
-- 支持中文和英文语音合成
-- 自动生成 SRT 字幕文件
-- 智能文本分割，长文本自动分段处理
-- 支持保存和复用说话人音色
-- **HTTP API Server 模式**：支持异步任务处理，适合服务化部署
+- 🎯 **声音克隆**: 从 3 秒参考音频克隆任意声音
+- 🎵 **9 种预设音色**: Vivian, Serena, Uncle_Fu, Dylan, Eric, Ryan, Aiden, Ono_Anna, Sohee
+- 🎨 **自然语言声音设计**: 用自然语言描述想要的声音（如"温暖的老年男声"）
+- 🌍 **多语言支持**: 支持中文、英文、日语、韩语、德语、法语、俄语、葡萄牙语、西班牙语、意大利语
+- 📝 **自动字幕生成**: 使用 Whisper 生成 SRT 字幕文件
+- 📄 **智能文本分割**: 长文本自动分段处理（最大 1000 字符/块）
+- 🔒 **完全本地运行**: 无需网络，保障隐私
+- 🚀 **HTTP API Server 模式**: 支持异步任务处理，适合服务化部署
+
+## 快速开始
+
+```bash
+# 安装
+pip install tts-cli
+
+# 使用预设音色生成语音
+tts-cli --text "你好，世界" --speaker Vivian --output hello.wav
+
+# 克隆你自己的声音
+tts-cli --mode clone \
+  --reference-audio my_voice.wav \
+  --reference-text "这是我的声音样本" \
+  --text "测试克隆的声音" \
+  --save-speaker my_voice.qwen-voice
+
+# 使用克隆的声音
+tts-cli --text "新的内容" --speaker my_voice.qwen-voice --output new.wav
+```
 
 ## 系统要求
 
 - Python 3.10+
 - CUDA GPU（推荐，CPU 也可运行但较慢）
-- 显存 4GB+（推荐 8GB+）
+- 显存 4GB+（推荐 8GB+ 用于 1.7B 模型）
 
 ## 安装
 
@@ -31,25 +65,25 @@ cd tts-cli
 pip install -e .
 ```
 
-### 2. 安装 ChatTTS 模型
+### 2. 安装 Qwen3-TTS 模型
 
-ChatTTS 模型会在首次运行时自动从 HuggingFace 下载（约 2GB）。
+Qwen3-TTS 模型会在首次运行时自动从 HuggingFace 下载（约 3-5GB）。
 
 **自动下载**（推荐）：
 ```bash
-# 首次运行会自动下载模型到 ~/.cache/huggingface/hub/models--2Noise--ChatTTS/
-tts-cli --text "测试" --output test.wav --skip-subtitles
+# 首次运行会自动下载模型
+tts-cli --text "测试" --speaker Ryan --output test.wav --skip-subtitles
 ```
 
 **手动下载**（如果自动下载失败）：
 ```bash
 # 方法 1: 使用 huggingface-cli
 pip install huggingface_hub
-huggingface-cli download 2Noise/ChatTTS --local-dir ~/.cache/huggingface/hub/models--2Noise--ChatTTS
+huggingface-cli download Qwen/Qwen3-TTS-12Hz-1.7B-Base
 
 # 方法 2: 使用 Git LFS
 git lfs install
-git clone https://huggingface.co/2Noise/ChatTTS ~/.cache/huggingface/hub/models--2Noise--ChatTTS
+git clone https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base
 ```
 
 **国内镜像**（如果 HuggingFace 访问慢）：
@@ -58,13 +92,28 @@ git clone https://huggingface.co/2Noise/ChatTTS ~/.cache/huggingface/hub/models-
 export HF_ENDPOINT=https://hf-mirror.com
 
 # 然后运行 tts-cli，会从镜像下载
-tts-cli --text "测试" --output test.wav --skip-subtitles
+tts-cli --text "测试" --speaker Ryan --output test.wav --skip-subtitles
 ```
 
-### 3. 安装 Whisper（可选，用于字幕生成）
+**可用模型变体**:
+- `1.7B-Base`: 默认，支持声音克隆（推荐）
+- `1.7B-CustomVoice`: 9 种预设音色 + 风格控制
+- `1.7B-VoiceDesign`: 自然语言声音设计
+- `0.6B-Base`: 轻量版声音克隆
+- `0.6B-CustomVoice`: 轻量版预设音色
+
+### 3. 安装可选依赖
 
 ```bash
+# 字幕生成（推荐）
 pip install openai-whisper
+
+# 性能优化：numba（推荐）
+pip install numba
+
+# 高级性能优化：FlashAttention 2（可选，需要 CUDA）
+# 注意：flash-attn 安装可能失败，需要特定的 CUDA 版本和编译环境
+pip install flash-attn --no-build-isolation
 ```
 
 ## 使用
@@ -72,36 +121,65 @@ pip install openai-whisper
 ### 基本用法
 
 ```bash
-# 文本转语音
-tts-cli --text "你好，欢迎使用 tts-cli。" --output output.wav
+# 使用预设音色（推荐新手）
+tts-cli --text "你好，欢迎使用 tts-cli" --speaker Vivian --output output.wav
 
 # 从文件读取文本
-tts-cli --file article.txt --output output.wav
+tts-cli --file article.txt --speaker Ryan --output output.wav
 
 # 只生成音频，跳过字幕
-tts-cli --text "Hello world" --output output.wav --skip-subtitles
+tts-cli --text "Hello world" --speaker Ryan --output output.wav --skip-subtitles
+
+# 多语言支持
+tts-cli --text "Bonjour le monde" --speaker Ryan --language fr --output french.wav
+```
+
+### 声音克隆
+
+```bash
+# 从参考音频克隆声音并保存
+tts-cli --mode clone \
+  --reference-audio voice_sample.wav \
+  --reference-text "这是我的声音样本" \
+  --text "测试克隆的声音" \
+  --save-speaker my_voice.qwen-voice \
+  --output test.wav
+
+# 使用已保存的克隆声音
+tts-cli --file novel.txt --speaker my_voice.qwen-voice --output novel.wav
+```
+
+### 声音设计
+
+```bash
+# 用自然语言描述想要的声音
+tts-cli --mode design \
+  --voice-description "温暖的老年男性声音，带有轻微的英国口音" \
+  --text "晚上好，女士们先生们" \
+  --output speech.wav
 ```
 
 ### 高级用法
 
 ```bash
-# 保存说话人音色（便于复用）
-tts-cli --text "测试音色" --output test.wav --save-speaker my_voice.pt
-
-# 使用已保存的音色
-tts-cli --file novel.txt --output novel.wav --speaker my_voice.pt
-
 # 调整语速（0-9，默认 3）
-tts-cli --text "快速播放" --output fast.wav --speed 5
+tts-cli --text "快速播放" --speaker Ryan --output fast.wav --speed 7
 
-# 指定语言（en/zh）
-tts-cli --file english.txt --output en.wav --language en
+# 添加说话风格指令
+tts-cli --text "我太兴奋了！" --speaker Aiden \
+  --instruct "speak with enthusiasm" --output excited.wav
+
+# 处理长文本（自动分块）
+tts-cli --file long_article.txt --speaker Vivian \
+  --max-length 1000 --max-batch 4 --output long.wav
 
 # 静默模式（只输出文件路径）
-tts-cli --file text.txt --output out.wav --quiet
+tts-cli --file text.txt --speaker Ryan --output out.wav --quiet
 ```
 
 ## 参数说明
+
+### 基础参数
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
@@ -109,16 +187,44 @@ tts-cli --file text.txt --output out.wav --quiet
 | `--file` / `--input` | 输入文本文件路径 | - |
 | `--output` | 输出音频文件路径 | output.wav |
 | `--subtitle` | 输出字幕文件路径 | 自动派生 |
-| `--speed` | 语速 0-9 | 3 |
-| `--language` | 语言 en/zh | en |
-| `--speaker` | 说话人音色文件 (.pt) | 随机 |
-| `--save-speaker` | 保存当前音色到文件 | - |
-| `--max-length` | 文本分块最大长度 | 500 |
-| `--max-batch` | 批处理大小 | 1 |
 | `--skip-subtitles` | 跳过字幕生成 | false |
-| `--no-normalize` | 禁用文本规范化 | false |
-| `--whisper-model` | Whisper 模型大小 | base |
-| `--quiet` | 静默模式 | false |
+| `--quiet` | 静默模式（只输出文件路径） | false |
+
+### 声音参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--mode` | 声音模式：`custom`/`design`/`clone` | custom |
+| `--speaker` | 预设音色名称 或 音色文件 (.qwen-voice) | Ryan |
+| `--voice-description` | 自然语言声音描述（design 模式） | - |
+| `--reference-audio` | 参考音频文件（clone 模式） | - |
+| `--reference-text` | 参考音频转录文本（clone 模式） | - |
+| `--save-speaker` | 保存克隆声音到文件 | - |
+| `--instruct` | 说话风格指令 | - |
+
+### 处理参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--speed` | 语速 0-9（低速用 0-2，高速用 7-9） | 3 |
+| `--language` | 语言代码（zh/en/ja/ko/de/fr/ru/pt/es/it/auto） | auto |
+| `--max-length` | 文本分块最大长度 | 1000 |
+| `--max-batch` | 批处理大小 | 4 |
+| `--whisper-model` | Whisper 模型大小（tiny/base/small/medium/large） | base |
+
+### 可用预设音色
+
+| 音色名称 | 语言 | 性别 | 特点 |
+|---------|------|------|------|
+| Vivian | 中文 | 女 | 清晰、专业 |
+| Serena | 中文 | 女 | 温暖、友好 |
+| Uncle_Fu | 中文 | 男 | 成熟、权威 |
+| Dylan | 中文（北京） | 男 | 年轻、有活力 |
+| Eric | 中文（四川） | 男 | 独特方言 |
+| Ryan | 英语 | 男 | 清晰、中性 |
+| Aiden | 英语 | 男 | 专业、温暖 |
+| Ono_Anna | 日语 | 女 | 清晰、专业 |
+| Sohee | 韩语 | 女 | 清晰、友好 |
 
 ## Server 模式
 
@@ -177,13 +283,27 @@ tts-cli serve --port 8000 --mongodb-uri mongodb://localhost:27017
 
 **请求示例：**
 ```bash
+# 使用预设音色
 curl -X POST http://localhost:8000/api/v1/create_tts_task \
   -H "Content-Type: application/json" \
   -d '{
     "text": "你好，欢迎使用 tts-cli 服务。",
+    "mode": "custom",
+    "speaker": "Vivian",
     "language": "zh",
     "speed": 3,
     "skip_subtitles": false
+  }'
+
+# 使用声音克隆
+curl -X POST http://localhost:8000/api/v1/create_tts_task \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "这是克隆声音的测试",
+    "mode": "clone",
+    "reference_audio_url": "https://example.com/voice.wav",
+    "reference_text": "参考音频的转录文本",
+    "skip_subtitles": true
   }'
 ```
 
@@ -192,12 +312,16 @@ curl -X POST http://localhost:8000/api/v1/create_tts_task \
 | 参数 | 类型 | 必填 | 说明 | 默认值 |
 |------|------|------|------|--------|
 | `text` | string | 是 | 要转换的文本（最大 100,000 字符） | - |
-| `language` | string | 否 | 语言：`en` 或 `zh` | en |
+| `mode` | string | 否 | 声音模式：`custom`/`design`/`clone` | custom |
+| `speaker` | string | 否 | 预设音色名称（custom 模式） | Ryan |
+| `voice_description` | string | 否 | 声音描述（design 模式） | null |
+| `reference_audio_url` | string | 否 | 参考音频 URL（clone 模式） | null |
+| `reference_text` | string | 否 | 参考音频转录（clone 模式） | null |
+| `language` | string | 否 | 语言代码（zh/en/ja/ko/de/fr/ru/pt/es/it/auto） | auto |
 | `speed` | int | 否 | 语速 0-9 | 3 |
-| `break_level` | int | 否 | 标点停顿强度 0-7 | 5 |
-| `speaker_id` | string | 否 | 本地说话人音色文件路径 (.pt) | null |
-| `max_length` | int | 否 | 文本分块最大长度 | 500 |
-| `max_batch` | int | 否 | 批处理大小 | 1 |
+| `instruct` | string | 否 | 说话风格指令 | null |
+| `max_length` | int | 否 | 文本分块最大长度 | 1000 |
+| `max_batch` | int | 否 | 批处理大小 | 4 |
 | `skip_subtitles` | bool | 否 | 是否跳过字幕生成 | false |
 | `whisper_model` | string | 否 | Whisper 模型大小 | base |
 | `callback_url` | string | 否 | 任务完成回调 URL | null |
@@ -394,6 +518,10 @@ docker-compose up -d
 
 ## 常见问题
 
+### Q: 我的旧 .pt 音色文件无法使用？
+
+**v0.2.0 版本不再兼容 ChatTTS 的 .pt 文件**。请参考 [迁移指南](MIGRATION.md) 使用声音克隆功能重新创建音色文件。
+
 ### Q: 模型下载很慢怎么办？
 
 设置 HuggingFace 镜像：
@@ -401,24 +529,73 @@ docker-compose up -d
 export HF_ENDPOINT=https://hf-mirror.com
 ```
 
-### Q: 出现 "found invalid characters" 错误？
+### Q: 如何克隆自己的声音？
 
-tts-cli 会自动规范化文本，但如果仍有问题，检查文本是否包含特殊字符。ChatTTS 只支持：
-- 英文字母 a-z, A-Z
-- 中文字符
-- 标点符号：。，！
-- 空格
+需要准备：
+1. 3-10 秒的清晰参考音频（WAV/MP3/FLAC）
+2. 参考音频的准确转录文本
+
+```bash
+tts-cli --mode clone \
+  --reference-audio my_voice.wav \
+  --reference-text "这是我的声音样本" \
+  --text "测试内容" \
+  --save-speaker my_voice.qwen-voice \
+  --output test.wav
+```
+
+克隆质量提示：
+- ✅ 音频清晰、背景噪音少
+- ✅ 转录文本完全匹配音频
+- ✅ 单人说话
+- ✅ 3-10 秒长度最佳
+
+### Q: 哪种预设音色最适合我？
+
+根据语言和需求选择：
+- **中文内容**: Vivian（女声，专业）、Dylan（男声，年轻）、Uncle_Fu（男声，成熟）
+- **英文内容**: Ryan（男声，中性）、Aiden（男声，温暖）
+- **日语内容**: Ono_Anna（女声）
+- **韩语内容**: Sohee（女声）
 
 ### Q: 音频时长很短，不完整？
 
 这可能是因为某些文本块生成失败。尝试：
-1. 使用 `--max-length 300` 减小分块大小
-2. 检查文本是否有特殊字符
+1. 使用 `--max-length 800` 调整分块大小
+2. 检查 GPU 显存是否足够
 
 ### Q: GPU 显存不足？
 
+解决方法：
+- 减小 `--max-batch` 参数（如改为 2 或 1）
 - 减小 `--max-length` 参数
 - 使用 `--whisper-model tiny` 减小 Whisper 模型
+- 使用轻量版模型（0.6B）
+
+### Q: 支持哪些语言？
+
+支持 10 种语言：中文（zh）、英语（en）、日语（ja）、韩语（ko）、德语（de）、法语（fr）、俄语（ru）、葡萄牙语（pt）、西班牙语（es）、意大利语（it）
+
+使用 `--language auto` 可自动检测语言。
+
+### Q: 如何安装 FlashAttention 2 以获得更好的性能？
+
+FlashAttention 2 可以减少 GPU 显存使用并提高推理速度，但**不是必需的**。安装方法：
+
+```bash
+# 方法 1：先安装 tts-cli，再单独安装 flash-attn
+pip install tts-cli
+pip install flash-attn --no-build-isolation
+
+# 方法 2：从源码安装
+pip install -e .
+pip install flash-attn --no-build-isolation
+```
+
+**注意**：
+- flash-attn 需要 CUDA 环境和特定的编译工具链
+- 如果安装失败，**不影响** tts-cli 的正常使用
+- 只有在有 NVIDIA GPU 且需要极致性能时才需要安装
 
 ## 开发
 
