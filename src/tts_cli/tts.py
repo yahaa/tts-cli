@@ -1,22 +1,23 @@
-"""ChatTTS wrapper for tts-cli.
+"""Qwen3-TTS wrapper for tts-cli.
 
-This module handles text-to-speech generation using ChatTTS,
+This module handles text-to-speech generation using Qwen3-TTS,
 with GPU memory management and batch processing for optimal performance.
+
+Includes backward-compatible wrappers for ChatTTS API to maintain existing functionality.
 """
 
-import os
 from typing import List, Optional, Tuple
 
 import numpy as np
 import scipy.io.wavfile as wavfile
 import torch
 
-from .audio import SAMPLE_RATE, float_to_int16
+from .audio import float_to_int16
 from .utils import print_info, print_success
+from .voice import load_voice_prompt, save_voice_prompt
 
-# ========================================
-# GPU Memory Utils
-# ========================================
+# Model cache to avoid reloading
+_MODEL_CACHE = {}
 
 
 def get_gpu_free_memory_mb() -> float:
@@ -37,48 +38,30 @@ def get_gpu_free_memory_mb() -> float:
         return 0
 
 
-def estimate_memory_per_chunk_mb(chunk_chars: int = 800, fp16: bool = True) -> float:
+def estimate_memory_per_chunk_mb(chunk_chars: int = 1000, fp16: bool = True) -> float:
     """
-    Estimate GPU memory usage per chunk based on ChatTTS model architecture.
-
-    Based on GPT config: hidden_size=768, num_hidden_layers=20, max_new_token=2048
+    Estimate GPU memory usage per chunk for Qwen3-TTS.
 
     Args:
         chunk_chars: Number of characters per chunk
-        fp16: Whether using FP16 (default) or FP32
+        fp16: Whether using FP16 (unused, kept for API compatibility)
 
     Returns:
         Estimated memory usage in MB per chunk
     """
-    # Rough token estimation: ~2 tokens per character
-    input_tokens = chunk_chars * 2
-    output_tokens = 2048  # max_new_token
-    total_tokens = input_tokens + output_tokens
+    # Per-chunk inference memory (rough estimate for Qwen3-TTS)
+    # ~300-500MB per chunk depending on length
+    per_chunk_memory = 300 + (chunk_chars / 1000) * 200
 
-    hidden_size = 768
-    num_layers = 20
-    bytes_per_element = 2 if fp16 else 4
-
-    # KV cache: 2 (K+V) * layers * seq_len * hidden_size * bytes
-    kv_cache_mb = (2 * num_layers * total_tokens * hidden_size * bytes_per_element) / (
-        1024 * 1024
-    )
-
-    # Intermediate activations (roughly 1.5x KV cache)
-    activations_mb = kv_cache_mb * 1.5
-
-    # Add safety margin (1.3x)
-    total_mb = (kv_cache_mb + activations_mb) * 1.3
-
-    return total_mb
+    return per_chunk_memory
 
 
 def calculate_optimal_batch_size(
     num_chunks: int,
-    chunk_chars: int = 500,
-    reserved_memory_mb: float = 2048,
+    chunk_chars: int = 1000,
+    reserved_memory_mb: float = 1024,
     min_batch: int = 1,
-    max_batch: int = 1,  # Disabled batch processing - sequential is more reliable
+    max_batch: int = 4,
 ) -> int:
     """
     Calculate optimal batch size based on available GPU memory.
@@ -86,7 +69,7 @@ def calculate_optimal_batch_size(
     Args:
         num_chunks: Total number of chunks to process
         chunk_chars: Average characters per chunk
-        reserved_memory_mb: Memory to reserve for model and system (default 1GB)
+        reserved_memory_mb: Memory to reserve for system (default 1GB)
         min_batch: Minimum batch size
         max_batch: Maximum batch size
 
@@ -97,130 +80,386 @@ def calculate_optimal_batch_size(
 
     if free_memory <= 0:
         # No GPU or can't detect, use conservative batch size
-        return min(1, num_chunks)
+        return min(min_batch, num_chunks)
 
-    # Available memory for inference
-    available_mb = free_memory - reserved_memory_mb
-    if available_mb <= 0:
-        return min_batch
+    # Calculate available memory for batching
+    available_memory = free_memory - reserved_memory_mb
 
-    # Memory per chunk
-    mem_per_chunk = estimate_memory_per_chunk_mb(chunk_chars)
+    if available_memory <= 0:
+        return min(min_batch, num_chunks)
+
+    # Estimate memory per chunk
+    memory_per_chunk = estimate_memory_per_chunk_mb(chunk_chars)
 
     # Calculate batch size
-    batch_size = int(available_mb / mem_per_chunk)
+    if memory_per_chunk > 0:
+        batch_size = int(available_memory / memory_per_chunk)
+    else:
+        batch_size = max_batch
 
-    # Clamp to valid range
+    # Clamp to min/max and actual number of chunks
     batch_size = max(min_batch, min(batch_size, max_batch, num_chunks))
 
     return batch_size
 
 
+def get_default_model_variant(mode: str) -> str:
+    """
+    Get default model variant for given voice mode.
+
+    Args:
+        mode: Voice mode ('custom', 'design', 'clone')
+
+    Returns:
+        Model variant string
+    """
+    if mode == "custom":
+        return "1.7B-CustomVoice"
+    elif mode == "design":
+        return "1.7B-VoiceDesign"
+    elif mode == "clone":
+        return "1.7B-Base"
+    return "1.7B-Base"
+
+
+def init_qwen_tts(
+    variant: str = "1.7B-Base",
+    device: str = "auto",
+    use_flash_attn: bool = True,
+    quiet: bool = False,
+):
+    """
+    Initialize and cache Qwen3-TTS model.
+
+    Args:
+        variant: Model variant to load
+        device: Device to use ('auto', 'cuda', 'cpu')
+        use_flash_attn: Whether to use FlashAttention 2 (reduces memory)
+        quiet: Suppress initialization messages
+
+    Returns:
+        Qwen3-TTS model instance
+    """
+    # Check cache first
+    cache_key = f"{variant}_{device}_{use_flash_attn}"
+    if cache_key in _MODEL_CACHE:
+        if not quiet:
+            print_info(f"Using cached Qwen3-TTS model ({variant})")
+        return _MODEL_CACHE[cache_key]
+
+    if not quiet:
+        print_info("Initializing Qwen3-TTS model...")
+        print_info(f"Model variant: {variant}")
+        print_info(f"Device: {device}")
+        if use_flash_attn:
+            print_info("FlashAttention 2: enabled (reduces GPU memory)")
+
+    try:
+        from qwen_tts import Qwen3TTSModel
+
+        # Prepare initialization arguments
+        model_name = f"Qwen/Qwen3-TTS-12Hz-{variant}"
+
+        # Determine device_map - avoid "auto" which may cause meta device issues
+        if device == "auto":
+            # Explicitly choose device instead of using "auto"
+            if torch.cuda.is_available():
+                device_map = "cuda"
+            else:
+                device_map = "cpu"
+        else:
+            device_map = device
+
+        # Prepare kwargs
+        kwargs = {
+            "device_map": device_map,
+        }
+
+        # Add FlashAttention 2 if requested
+        if use_flash_attn:
+            kwargs["attn_implementation"] = "flash_attention_2"
+
+        # Try to initialize model using from_pretrained
+        try:
+            model = Qwen3TTSModel.from_pretrained(model_name, **kwargs)
+        except Exception as e:
+            # If FlashAttention 2 failed, retry without it
+            if use_flash_attn and "flash_attn" in str(e).lower():
+                if not quiet:
+                    print_info(
+                        "FlashAttention 2 not available, falling back to standard attention"
+                    )
+                # Remove flash attention and retry
+                kwargs.pop("attn_implementation", None)
+                model = Qwen3TTSModel.from_pretrained(model_name, **kwargs)
+            else:
+                raise
+
+        # Cache the model
+        _MODEL_CACHE[cache_key] = model
+
+        if not quiet:
+            print_success(f"Model loaded: {variant}")
+
+        return model
+
+    except ImportError as e:
+        raise ImportError(
+            f"Failed to import qwen_tts: {e}\n\n"
+            "Install Qwen3-TTS with:\n"
+            "  pip install qwen-tts\n\n"
+            "For better performance with FlashAttention 2:\n"
+            "  pip install flash-attn --no-build-isolation"
+        )
+    except Exception as e:
+        raise RuntimeError(f"Failed to initialize Qwen3-TTS model: {e}")
+
+
+def generate_with_custom_voice(
+    model,
+    text: str,
+    speaker: str = "Ryan",
+    language: str = "auto",
+    instruct: Optional[str] = None,
+) -> Tuple[np.ndarray, int]:
+    """
+    Generate audio using custom voice (premium speakers).
+
+    Args:
+        model: Qwen3-TTS model instance
+        text: Text to synthesize
+        speaker: Speaker name
+        language: Language code
+        instruct: Optional style instruction
+
+    Returns:
+        Tuple of (audio_array, sample_rate)
+    """
+    try:
+        # Generate using Qwen3-TTS custom voice API
+        wavs, sr = model.generate_custom_voice(
+            text=text, language=language, speaker=speaker, instruct=instruct
+        )
+
+        # Convert to numpy array if needed
+        if isinstance(wavs, torch.Tensor):
+            audio = wavs.cpu().numpy()
+        else:
+            audio = np.array(wavs)
+
+        # Ensure single channel
+        if len(audio.shape) > 1:
+            audio = audio.squeeze()
+
+        # Convert float to int16
+        if audio.dtype == np.float32 or audio.dtype == np.float64:
+            audio = float_to_int16(audio)
+
+        return audio, sr
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to generate audio with custom voice: {e}")
+
+
+def generate_with_voice_design(
+    model, text: str, voice_description: str, language: str = "auto"
+) -> Tuple[np.ndarray, int]:
+    """
+    Generate audio using voice design (natural language description).
+
+    Args:
+        model: Qwen3-TTS model instance
+        text: Text to synthesize
+        voice_description: Natural language voice description
+        language: Language code
+
+    Returns:
+        Tuple of (audio_array, sample_rate)
+    """
+    try:
+        # Generate using Qwen3-TTS voice design API
+        wavs, sr = model.generate_voice_design(
+            text=text, language=language, voice_description=voice_description
+        )
+
+        # Convert to numpy array
+        if isinstance(wavs, torch.Tensor):
+            audio = wavs.cpu().numpy()
+        else:
+            audio = np.array(wavs)
+
+        # Ensure single channel
+        if len(audio.shape) > 1:
+            audio = audio.squeeze()
+
+        # Convert float to int16
+        if audio.dtype == np.float32 or audio.dtype == np.float64:
+            audio = float_to_int16(audio)
+
+        return audio, sr
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to generate audio with voice design: {e}")
+
+
+def generate_with_voice_clone(
+    model, text: str, voice_prompt, language: str = "auto"
+) -> Tuple[np.ndarray, int]:
+    """
+    Generate audio using voice clone prompt.
+
+    Args:
+        model: Qwen3-TTS model instance
+        text: Text to synthesize
+        voice_prompt: Voice clone prompt from create_voice_clone_prompt()
+        language: Language code
+
+    Returns:
+        Tuple of (audio_array, sample_rate)
+    """
+    try:
+        # Generate using Qwen3-TTS voice clone API
+        wavs, sr = model.generate_voice_clone(
+            text=text, language=language, voice_clone_prompt=voice_prompt
+        )
+
+        # Convert to numpy array
+        if isinstance(wavs, torch.Tensor):
+            audio = wavs.cpu().numpy()
+        else:
+            audio = np.array(wavs)
+
+        # Ensure single channel
+        if len(audio.shape) > 1:
+            audio = audio.squeeze()
+
+        # Convert float to int16
+        if audio.dtype == np.float32 or audio.dtype == np.float64:
+            audio = float_to_int16(audio)
+
+        return audio, sr
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to generate audio with voice clone: {e}")
+
+
+def generate_batch(
+    model,
+    texts: List[str],
+    mode: str = "custom",
+    speaker: Optional[str] = None,
+    voice_description: Optional[str] = None,
+    voice_prompt=None,
+    language: str = "auto",
+    instruct: Optional[str] = None,
+) -> List[Tuple[np.ndarray, int]]:
+    """
+    Batch generation for multiple text chunks.
+
+    Args:
+        model: Qwen3-TTS model instance
+        texts: List of text chunks to synthesize
+        mode: Voice mode ('custom', 'design', 'clone')
+        speaker: Speaker name for custom mode
+        voice_description: Voice description for design mode
+        voice_prompt: Voice prompt for clone mode
+        language: Language code
+        instruct: Optional style instruction
+
+    Returns:
+        List of (audio_array, sample_rate) tuples
+    """
+    results = []
+
+    # TODO: Check if Qwen3-TTS supports true batch inference with list input
+    # For now, process sequentially
+    for text in texts:
+        if mode == "custom":
+            audio, sr = generate_with_custom_voice(
+                model, text, speaker=speaker, language=language, instruct=instruct
+            )
+        elif mode == "design":
+            audio, sr = generate_with_voice_design(
+                model, text, voice_description=voice_description, language=language
+            )
+        elif mode == "clone":
+            audio, sr = generate_with_voice_clone(
+                model, text, voice_prompt=voice_prompt, language=language
+            )
+        else:
+            raise ValueError(f"Invalid mode: {mode}")
+
+        results.append((audio, sr))
+
+    return results
+
+
 # ========================================
-# ChatTTS Initialization
+# Backward-Compatible Wrappers for ChatTTS API
 # ========================================
 
 
 def init_chat_tts(quiet: bool = False):
     """
-    Initialize ChatTTS model.
+    Legacy name for init_qwen_tts (backward compatibility).
 
     Args:
         quiet: Suppress progress messages
 
     Returns:
-        Initialized ChatTTS.Chat instance
+        Initialized Qwen3-TTS model instance
     """
-    import ChatTTS
-
-    if not quiet:
-        print_info("Loading ChatTTS model...")
-
-    chat = ChatTTS.Chat()
-
-    # Try to load from huggingface cache first
-    hf_cache_path = os.path.join(
-        os.path.expanduser("~/.cache/huggingface/hub/models--2Noise--ChatTTS/snapshots")
-    )
-
-    loaded = False
-
-    if os.path.exists(hf_cache_path):
-        snapshots = [
-            d
-            for d in os.listdir(hf_cache_path)
-            if os.path.isdir(os.path.join(hf_cache_path, d))
-        ]
-        if snapshots:
-            custom_path = os.path.join(hf_cache_path, snapshots[0])
-            if not quiet:
-                print_info(f"Trying to load from cache: {custom_path}")
-            try:
-                loaded = chat.load(
-                    source="custom", custom_path=custom_path, compile=False
-                )
-            except Exception as e:
-                if not quiet:
-                    print_info(f"Custom load failed: {e}, falling back to huggingface")
-                loaded = False
-
-    # Fallback to huggingface if custom load failed
-    if not loaded:
-        if not quiet:
-            print_info("Loading from huggingface...")
-        loaded = chat.load(source="huggingface", compile=False)
-
-    if not loaded:
-        raise RuntimeError("Failed to load ChatTTS model")
-
-    return chat
+    return init_qwen_tts(variant="1.7B-CustomVoice", quiet=quiet)
 
 
-# ========================================
-# Speaker Management
-# ========================================
-
-
-def load_speaker(speaker_file: str) -> torch.Tensor:
+def sample_random_speaker(chat):
     """
-    Load speaker embedding from file.
+    Legacy ChatTTS API - returns default preset speaker.
 
     Args:
-        speaker_file: Path to speaker embedding file (.pt)
+        chat: Model instance (unused, kept for API compatibility)
 
     Returns:
-        Speaker embedding tensor
+        Default speaker name
     """
-    return torch.load(speaker_file, weights_only=True)
+    return "Ryan"  # Default to Ryan (English male voice)
 
 
-def save_speaker(spk: torch.Tensor, speaker_file: str) -> None:
+def load_speaker(speaker_file: str):
     """
-    Save speaker embedding to file.
+    Load speaker/voice from file (auto-detect format).
 
     Args:
-        spk: Speaker embedding tensor
-        speaker_file: Path to save speaker embedding
-    """
-    torch.save(spk, speaker_file)
-
-
-def sample_random_speaker(chat) -> torch.Tensor:
-    """
-    Sample a random speaker from ChatTTS.
-
-    Args:
-        chat: ChatTTS.Chat instance
+        speaker_file: Path to speaker/voice file
 
     Returns:
-        Speaker embedding tensor
+        Voice prompt for Qwen-TTS
+
+    Raises:
+        ValueError: If file is .pt (ChatTTS format, not supported)
     """
-    return chat.sample_random_speaker()
+    if speaker_file.endswith(".pt"):
+        raise ValueError(
+            "ChatTTS speaker files (.pt) are not compatible with Qwen-TTS.\n\n"
+            "To clone a voice:\n"
+            "  tts-cli --mode clone --reference-audio <file.wav> \\\n"
+            "          --reference-text '<transcript>' \\\n"
+            "          --save-speaker voice.qwen-voice\n"
+        )
+    return load_voice_prompt(speaker_file)
 
 
-# ========================================
-# Audio Generation
-# ========================================
+def save_speaker(voice_prompt, speaker_file: str) -> None:
+    """
+    Save voice prompt to file.
+
+    Args:
+        voice_prompt: Voice prompt to save
+        speaker_file: Output file path
+    """
+    if not speaker_file.endswith(".qwen-voice"):
+        speaker_file += ".qwen-voice"
+    save_voice_prompt(voice_prompt, speaker_file)
 
 
 def generate_audio(
@@ -234,201 +473,114 @@ def generate_audio(
     quiet: bool = False,
 ) -> Tuple[np.ndarray, float]:
     """
-    Generate audio using ChatTTS for a single text chunk.
+    Generate audio - backward compatible API.
 
     Args:
-        chat: Initialized ChatTTS Chat instance
+        chat: Qwen3-TTS model instance
         text: Input text to convert to speech
         speed: Speech speed (0-9)
         output_path: Output audio file path
-        speaker_file: Optional speaker embedding file to load
-        save_speaker_file: Optional file path to save speaker embedding
-        break_level: Pause strength at punctuation (0-7, default: 5). Currently unused.
+        speaker_file: Optional speaker/voice file to load
+        save_speaker_file: Optional file path to save voice
+        break_level: Pause strength (unused, kept for compatibility)
         quiet: Suppress progress messages
 
     Returns:
         Tuple of (audio_data, duration_seconds)
     """
-    import ChatTTS as CT
-
-    # Validate text is not empty or too short
-    if not text or len(text.strip()) < 2:
-        raise ValueError("Text is too short to generate audio (minimum 2 characters)")
+    # Map speed to instruct
+    instruct = None
+    if speed <= 2:
+        instruct = "speak slowly and clearly"
+    elif speed >= 7:
+        instruct = "speak quickly"
 
     if not quiet:
-        print_info(f"Speed parameter: speed_{speed}")
+        if instruct:
+            print_info(f"Style instruction: {instruct}")
 
-    # Load or sample speaker embedding
+    # Generate based on whether speaker file provided
     if speaker_file:
         if not quiet:
-            print_info(f"Loading speaker from: {speaker_file}")
-        spk = load_speaker(speaker_file)
+            print_info(f"Loading voice from: {speaker_file}")
+        voice_prompt = load_speaker(speaker_file)
+        audio, sr = generate_with_voice_clone(chat, text, voice_prompt)
+
+        # Save voice if requested
+        if save_speaker_file:
+            save_speaker(voice_prompt, save_speaker_file)
+            if not quiet:
+                print_info(f"Voice saved to: {save_speaker_file}")
     else:
         if not quiet:
-            print_info("Sampling random speaker...")
-        spk = sample_random_speaker(chat)
+            print_info("Using preset speaker: Ryan")
+        audio, sr = generate_with_custom_voice(
+            chat, text, speaker="Ryan", instruct=instruct
+        )
 
-    # Save speaker if requested
-    if save_speaker_file:
-        save_speaker(spk, save_speaker_file)
-        if not quiet:
-            print_info(f"Speaker saved to: {save_speaker_file}")
+    # Save audio
+    wavfile.write(output_path, sr, audio)
 
-    if not quiet:
-        print_info("Generating speech...")
-
-    # Generate audio with skip_refine_text=True to avoid "narrow(): length must be non-negative" errors
-    params_infer_code = CT.Chat.InferCodeParams(
-        spk_emb=spk,
-        prompt=f"[speed_{speed}]",
-        temperature=0.3,
-        top_P=0.7,
-        top_K=20,
-        repetition_penalty=1.05,
-        max_new_token=2048,
-    )
-
-    wavs = chat.infer(
-        [text],
-        skip_refine_text=True,
-        params_infer_code=params_infer_code,
-        use_decoder=True,
-        do_text_normalization=False,
-        do_homophone_replacement=False,
-    )
-
-    # Save audio with adaptive normalization
-    audio_data = float_to_int16(wavs[0])
-    wavfile.write(output_path, SAMPLE_RATE, audio_data)
-
-    duration = len(wavs[0]) / SAMPLE_RATE
+    duration = len(audio) / sr
 
     if not quiet:
         print_success(f"Audio saved: {output_path}")
         print_info(f"Duration: {duration:.2f} seconds")
 
-    return audio_data, duration
+    return audio, duration
 
 
 def generate_audio_batch(
     chat,
     texts: List[str],
     speed: int,
-    spk: torch.Tensor,
+    spk,
     break_level: int = 5,  # noqa: ARG001 - kept for API compatibility
     quiet: bool = False,
 ) -> List[np.ndarray]:
     """
-    Generate audio for multiple text chunks in a batch.
-
-    This leverages GPU parallelism for faster generation.
+    Batch generation - backward compatible API.
 
     Args:
-        chat: Initialized ChatTTS Chat instance
+        chat: Qwen3-TTS model instance
         texts: List of text chunks to convert
         speed: Speech speed (0-9)
-        spk: Speaker embedding tensor
-        break_level: Pause strength at punctuation (0-7). Currently unused.
+        spk: Speaker (string for preset name, or voice prompt object)
+        break_level: Pause strength (unused, kept for compatibility)
         quiet: Suppress progress messages
 
     Returns:
         List of audio arrays (int16)
     """
-    import ChatTTS as CT
+    # Map speed to instruct
+    instruct = None
+    if speed <= 2:
+        instruct = "speak slowly"
+    elif speed >= 7:
+        instruct = "speak quickly"
 
-    # Filter out empty or too-short texts to avoid ChatTTS errors
-    # Minimum 5 chars needed for reliable audio generation
-    MIN_TEXT_LENGTH = 5
-    valid_indices = []
-    valid_texts = []
-    for i, text in enumerate(texts):
-        if text and len(text.strip()) >= MIN_TEXT_LENGTH:
-            valid_indices.append(i)
-            valid_texts.append(text.strip())
+    # Determine mode based on spk type
+    if isinstance(spk, str):
+        mode = "custom"
+        speaker = spk
+        voice_prompt = None
+        if not quiet:
+            print_info(f"Batch generation with preset speaker: {speaker}")
+    else:
+        mode = "clone"
+        speaker = None
+        voice_prompt = spk
+        if not quiet:
+            print_info("Batch generation with cloned voice")
 
-    # If no valid texts, return list of None
-    if not valid_texts:
-        return [None] * len(texts)
-
-    # Audio generation parameters
-    # Note: ensure_non_empty=False to avoid "unexpected end at index" errors on Windows
-    params_infer_code = CT.Chat.InferCodeParams(
-        spk_emb=spk,
-        prompt=f"[speed_{speed}]",
-        temperature=0.3,
-        top_P=0.7,
-        top_K=20,
-        repetition_penalty=1.05,
-        max_new_token=2048,
-        ensure_non_empty=False,
+    results = generate_batch(
+        chat,
+        texts,
+        mode=mode,
+        speaker=speaker,
+        voice_prompt=voice_prompt,
+        instruct=instruct,
     )
 
-    # Build result array with None for all positions
-    audio_arrays = [None] * len(texts)
-
-    # Try batch inference first (faster on GPU)
-    batch_success = False
-    try:
-        wavs = chat.infer(
-            valid_texts,
-            skip_refine_text=True,
-            params_infer_code=params_infer_code,
-            use_decoder=True,
-            do_text_normalization=False,
-            do_homophone_replacement=False,
-        )
-        if wavs is not None and len(wavs) == len(valid_texts):
-            batch_success = True
-            for idx, wav in zip(valid_indices, wavs):
-                if wav is not None and len(wav) > 0:
-                    audio_arrays[idx] = _convert_wav_to_int16(wav)
-                elif not quiet:
-                    print_info(f"Warning: Chunk {idx} returned empty audio")
-    except Exception as e:
-        batch_success = False
-        if not quiet:
-            print_info(f"Batch inference failed: {e}")
-
-    # Fallback: process failed items one by one
-    if not batch_success:
-        if not quiet:
-            print_info("Falling back to sequential processing...")
-        for idx, text in zip(valid_indices, valid_texts):
-            if audio_arrays[idx] is not None:
-                continue  # Already succeeded in batch
-            try:
-                result = chat.infer(
-                    [text],
-                    skip_refine_text=True,
-                    params_infer_code=params_infer_code,
-                    use_decoder=True,
-                    do_text_normalization=False,
-                    do_homophone_replacement=False,
-                )
-                if (
-                    result
-                    and len(result) > 0
-                    and result[0] is not None
-                    and len(result[0]) > 0
-                ):
-                    audio_arrays[idx] = _convert_wav_to_int16(result[0])
-                elif not quiet:
-                    print_info(f"Warning: Chunk {idx} failed to generate audio")
-            except Exception as e:
-                if not quiet:
-                    print_info(f"Warning: Chunk {idx} error: {e}")
-
-    # Report success rate
-    success_count = sum(1 for a in audio_arrays if a is not None)
-    if not quiet and success_count < len(texts):
-        print_info(f"Generated {success_count}/{len(texts)} chunks successfully")
-
-    return audio_arrays
-
-
-def _convert_wav_to_int16(wav: np.ndarray) -> np.ndarray:
-    """Convert float wav to int16 with blended normalization."""
-    normalized = float_to_int16(wav)
-    original = (wav * 32767).astype(np.int16)
-    # Blend normalized and original for balanced audio
-    return (normalized * 0.7 + original * 0.3).astype(np.int16)
+    # Extract just audio arrays
+    return [audio for audio, sr in results]

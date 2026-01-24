@@ -1,10 +1,12 @@
 """Command-line interface for tts-cli."""
 
 import argparse
+import os
 import sys
 
-from .core import TTSConfig, run_tts_with_subtitles
+from .core import TTSConfig, VoiceConfig, run_tts_with_subtitles
 from .utils import validate_language, validate_speed
+from .voice import SUPPORTED_SPEAKERS
 
 
 def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
@@ -64,29 +66,54 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
         choices=range(8),
         help="Punctuation pause strength 0-7 (default: 5, higher=longer pauses)",
     )
+
+    # Voice options
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["custom", "design", "clone"],
+        help="Voice mode: custom (preset speakers), design (description), clone (reference audio)",
+    )
     parser.add_argument(
         "--speaker",
         type=str,
         default=None,
-        help="Speaker embedding file (PT format). If not provided, a random speaker will be sampled",
+        help="Voice file (.qwen-voice) OR preset name (Ryan, Vivian, Serena, etc.). Default: Ryan",
     )
     parser.add_argument(
         "--save-speaker",
         type=str,
         default=None,
-        help="Save the used speaker embedding to file for reuse",
+        help="Save voice to file (.qwen-voice format)",
     )
+    parser.add_argument(
+        "--voice-description",
+        type=str,
+        help="Natural language voice description (for --mode design)",
+    )
+    parser.add_argument(
+        "--reference-audio",
+        type=str,
+        help="Reference audio for voice cloning (3+ seconds, WAV/MP3/FLAC)",
+    )
+    parser.add_argument(
+        "--reference-text",
+        type=str,
+        help="Transcript of reference audio",
+    )
+
+    # Processing options
     parser.add_argument(
         "--max-length",
         type=int,
-        default=500,
-        help="Auto-split text longer than this into chunks (default: 500)",
+        default=1000,
+        help="Auto-split text longer than this into chunks (default: 1000)",
     )
     parser.add_argument(
         "--max-batch",
         type=int,
-        default=1,
-        help="Max chunks to process in parallel (default: 1, increase for faster but less stable)",
+        default=4,
+        help="Max chunks to process in parallel (default: 4)",
     )
     parser.add_argument(
         "--no-normalize",
@@ -180,15 +207,26 @@ def create_argument_parser() -> argparse.ArgumentParser:
         Configured ArgumentParser instance
     """
     parser = argparse.ArgumentParser(
-        description="ChatTTS Text-to-Speech CLI with Subtitle Generation",
+        description="Qwen3-TTS Text-to-Speech CLI with Voice Cloning and Subtitle Generation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s --text "Hello, world!"
+  # Basic usage with preset voice
+  %(prog)s --text "Hello, world!" --speaker Ryan
+
+  # Voice cloning
+  %(prog)s --mode clone --reference-audio my_voice.wav --reference-text "Sample" --text "Hello"
+
+  # From file
   %(prog)s --file article.txt --output output.wav --subtitle output.srt
-  %(prog)s --input story.txt --output-audio story.wav --speed 2
+
+  # Long text with batch processing
+  %(prog)s --file story.txt --max-length 1000 --max-batch 4
+
+  # Skip subtitles
   %(prog)s --text "Quick test" --skip-subtitles
-  %(prog)s --file data.txt --quiet
+
+  # Server mode
   %(prog)s serve --port 8000 --mongodb-uri mongodb://localhost:27017
         """,
     )
@@ -267,29 +305,54 @@ Examples:
         choices=range(8),
         help="Punctuation pause strength 0-7 (default: 5, higher=longer pauses)",
     )
+
+    # Voice options
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["custom", "design", "clone"],
+        help="Voice mode: custom (preset speakers), design (description), clone (reference audio)",
+    )
     parser.add_argument(
         "--speaker",
         type=str,
         default=None,
-        help="Speaker embedding file (PT format). If not provided, a random speaker will be sampled",
+        help="Voice file (.qwen-voice) OR preset name (Ryan, Vivian, Serena, etc.). Default: Ryan",
     )
     parser.add_argument(
         "--save-speaker",
         type=str,
         default=None,
-        help="Save the used speaker embedding to file for reuse",
+        help="Save voice to file (.qwen-voice format)",
     )
+    parser.add_argument(
+        "--voice-description",
+        type=str,
+        help="Natural language voice description (for --mode design)",
+    )
+    parser.add_argument(
+        "--reference-audio",
+        type=str,
+        help="Reference audio for voice cloning (3+ seconds, WAV/MP3/FLAC)",
+    )
+    parser.add_argument(
+        "--reference-text",
+        type=str,
+        help="Transcript of reference audio",
+    )
+
+    # Processing options
     parser.add_argument(
         "--max-length",
         type=int,
-        default=500,
-        help="Auto-split text longer than this into chunks (default: 500)",
+        default=1000,
+        help="Auto-split text longer than this into chunks (default: 1000)",
     )
     parser.add_argument(
         "--max-batch",
         type=int,
-        default=1,
-        help="Max chunks to process in parallel (default: 1, increase for faster but less stable)",
+        default=4,
+        help="Max chunks to process in parallel (default: 4)",
     )
     parser.add_argument(
         "--no-normalize",
@@ -330,6 +393,52 @@ def _run_generate(args) -> None:
     validate_speed(args.speed)
     validate_language(args.language)
 
+    # Determine voice mode
+    voice_mode = "custom"
+    if hasattr(args, "mode") and args.mode:
+        voice_mode = args.mode
+    elif hasattr(args, "reference_audio") and args.reference_audio:
+        voice_mode = "clone"
+    elif hasattr(args, "voice_description") and args.voice_description:
+        voice_mode = "design"
+
+    # Parse speaker argument (file path vs preset name)
+    speaker_file = None
+    speaker_name = "Ryan"  # Default speaker
+
+    if hasattr(args, "speaker") and args.speaker:
+        # Check if it's a file or preset name
+        if args.speaker.endswith(".qwen-voice") or args.speaker.endswith(".pt"):
+            speaker_file = args.speaker
+        elif args.speaker in SUPPORTED_SPEAKERS:
+            speaker_name = args.speaker
+        else:
+            # Try as file path
+            if os.path.exists(args.speaker):
+                speaker_file = args.speaker
+            else:
+                # Assume it's a preset name and let validation handle it
+                speaker_name = args.speaker
+
+    # Map speed to instruct parameter
+    instruct = None
+    if args.speed <= 2:
+        instruct = "speak slowly and clearly"
+    elif args.speed >= 7:
+        instruct = "speak quickly"
+
+    # Create voice config
+    voice_config = VoiceConfig(
+        mode=voice_mode,
+        speaker=speaker_name,
+        voice_description=getattr(args, "voice_description", None),
+        reference_audio=getattr(args, "reference_audio", None),
+        reference_text=getattr(args, "reference_text", None),
+        voice_prompt_file=speaker_file,
+        save_voice_prompt_path=args.save_speaker,
+        instruct=instruct,
+    )
+
     # Create config from args
     config = TTSConfig(
         text=args.text,
@@ -348,6 +457,7 @@ def _run_generate(args) -> None:
         skip_subtitles=args.skip_subtitles,
         no_json=args.no_json,
         quiet=args.quiet,
+        voice=voice_config,
     )
 
     # Run main workflow
