@@ -132,7 +132,14 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--skip-subtitles",
         action="store_true",
-        help="Generate audio only, skip subtitle generation",
+        default=True,
+        help="Skip subtitle generation (default: True)",
+    )
+    parser.add_argument(
+        "--subtitles",
+        action="store_true",
+        default=False,
+        help="Enable subtitle generation (requires openai-whisper)",
     )
     parser.add_argument(
         "--no-json", action="store_true", help="Skip JSON output generation"
@@ -371,7 +378,14 @@ Examples:
     parser.add_argument(
         "--skip-subtitles",
         action="store_true",
-        help="Generate audio only, skip subtitle generation",
+        default=True,
+        help="Skip subtitle generation (default: True)",
+    )
+    parser.add_argument(
+        "--subtitles",
+        action="store_true",
+        default=False,
+        help="Enable subtitle generation (requires openai-whisper)",
     )
     parser.add_argument(
         "--no-json", action="store_true", help="Skip JSON output generation"
@@ -454,7 +468,7 @@ def _run_generate(args) -> None:
         max_batch=args.max_batch,
         no_normalize=args.no_normalize,
         whisper_model=args.whisper_model,
-        skip_subtitles=args.skip_subtitles,
+        skip_subtitles=not args.subtitles if args.subtitles else args.skip_subtitles,
         no_json=args.no_json,
         quiet=args.quiet,
         voice=voice_config,
