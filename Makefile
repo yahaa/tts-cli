@@ -14,8 +14,8 @@ check: format lint
 
 # 安装开发依赖
 install:
-	pip install -e ".[dev]"
-	pip install ruff
+	python -m pip install -e ".[dev]"
+	python -m pip install ruff
 
 # 运行测试
 test:

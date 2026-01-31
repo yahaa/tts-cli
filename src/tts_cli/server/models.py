@@ -16,9 +16,9 @@ class CreateTtsTaskRequest(BaseModel):
         examples=["你好，欢迎使用 tts-cli 服务。"],
     )
     language: str = Field(
-        default="en",
-        description="语言代码：'en'（英文）或 'zh'（中文）",
-        examples=["zh", "en"],
+        default="auto",
+        description="语言代码：auto, zh, en, ja, ko, de, fr, ru, pt, es, it",
+        examples=["auto", "zh", "en"],
     )
     speed: int = Field(
         default=3,

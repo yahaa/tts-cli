@@ -40,22 +40,41 @@ def validate_speed(speed: int) -> int:
     return speed
 
 
+LANGUAGE_MAP = {
+    "auto": "auto",
+    "zh": "chinese",
+    "en": "english",
+    "fr": "french",
+    "de": "german",
+    "it": "italian",
+    "ja": "japanese",
+    "ko": "korean",
+    "pt": "portuguese",
+    "ru": "russian",
+    "es": "spanish",
+}
+
+SUPPORTED_LANGUAGES = list(LANGUAGE_MAP.keys())
+
+
 def validate_language(lang: str) -> str:
     """
-    Validate language code.
+    Validate and convert language code to Qwen3-TTS language name.
 
     Args:
-        lang: Language code to validate
+        lang: Short language code (e.g., 'en', 'zh', 'auto')
 
     Returns:
-        Validated language code
+        Full language name for Qwen3-TTS (e.g., 'english', 'chinese', 'auto')
 
     Raises:
         ValueError: If language code is not supported
     """
-    if lang not in ["en", "zh"]:
-        raise ValueError(f"Language must be 'en' or 'zh', got '{lang}'")
-    return lang
+    if lang not in LANGUAGE_MAP:
+        raise ValueError(
+            f"Language must be one of {SUPPORTED_LANGUAGES}, got '{lang}'"
+        )
+    return LANGUAGE_MAP[lang]
 
 
 def read_text_from_file(filepath: str) -> str:

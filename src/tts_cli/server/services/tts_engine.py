@@ -7,6 +7,7 @@ from typing import Optional
 
 from ...core import TTSConfig, run_tts_with_subtitles
 from ...tts import init_chat_tts
+from ...utils import LANGUAGE_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class TTSEngine:
         text: str,
         output_dir: str,
         task_id: str,
-        language: str = "en",
+        language: str = "auto",
         speed: int = 3,
         break_level: int = 5,
         speaker_id: Optional[str] = None,
@@ -66,6 +67,9 @@ class TTSEngine:
             Tuple of (audio_path, subtitle_path, duration)
         """
         self.ensure_loaded()
+
+        # Convert short language code to full name for Qwen3-TTS
+        language = LANGUAGE_MAP.get(language, language)
 
         # Create task output directory
         task_dir = os.path.join(output_dir, "tasks", task_id)

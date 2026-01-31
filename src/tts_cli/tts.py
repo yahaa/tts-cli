@@ -178,22 +178,41 @@ def init_qwen_tts(
         # Add FlashAttention 2 if requested
         if use_flash_attn:
             kwargs["attn_implementation"] = "flash_attention_2"
+            kwargs["dtype"] = torch.bfloat16
 
-        # Try to initialize model using from_pretrained
-        try:
-            model = Qwen3TTSModel.from_pretrained(model_name, **kwargs)
-        except Exception as e:
-            # If FlashAttention 2 failed, retry without it
-            if use_flash_attn and "flash_attn" in str(e).lower():
-                if not quiet:
-                    print_info(
-                        "FlashAttention 2 not available, falling back to standard attention"
-                    )
-                # Remove flash attention and retry
-                kwargs.pop("attn_implementation", None)
-                model = Qwen3TTSModel.from_pretrained(model_name, **kwargs)
+        # Try to load from local cache first (offline), then fall back to network
+        import os
+
+        def _restore_hf_offline(old_val):
+            if old_val is None:
+                os.environ.pop("HF_HUB_OFFLINE", None)
             else:
-                raise
+                os.environ["HF_HUB_OFFLINE"] = old_val
+
+        old_hf_offline = os.environ.get("HF_HUB_OFFLINE")
+        try:
+            os.environ["HF_HUB_OFFLINE"] = "1"
+            model = Qwen3TTSModel.from_pretrained(model_name, **kwargs)
+        except Exception:
+            _restore_hf_offline(old_hf_offline)
+            if not quiet:
+                print_info("Local cache not found, downloading from HuggingFace...")
+            try:
+                model = Qwen3TTSModel.from_pretrained(model_name, **kwargs)
+            except Exception as e:
+                # If FlashAttention 2 failed, retry without it
+                if use_flash_attn and "flash_attn" in str(e).lower():
+                    if not quiet:
+                        print_info(
+                            "FlashAttention 2 not available, falling back to standard attention"
+                        )
+                    kwargs.pop("attn_implementation", None)
+                    kwargs.pop("dtype", None)
+                    model = Qwen3TTSModel.from_pretrained(model_name, **kwargs)
+                else:
+                    raise
+        else:
+            _restore_hf_offline(old_hf_offline)
 
         # Cache the model
         _MODEL_CACHE[cache_key] = model

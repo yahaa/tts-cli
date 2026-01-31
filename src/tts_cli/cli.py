@@ -5,7 +5,7 @@ import os
 import sys
 
 from .core import TTSConfig, VoiceConfig, run_tts_with_subtitles
-from .utils import validate_language, validate_speed
+from .utils import SUPPORTED_LANGUAGES, validate_language, validate_speed
 from .voice import SUPPORTED_SPEAKERS
 
 
@@ -55,9 +55,9 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--language",
         type=str,
-        default="en",
-        choices=["en", "zh"],
-        help="Language code: 'en' or 'zh' (default: en)",
+        default="auto",
+        choices=SUPPORTED_LANGUAGES,
+        help=f"Language: {', '.join(SUPPORTED_LANGUAGES)} (default: auto)",
     )
     parser.add_argument(
         "--break-level",
@@ -301,9 +301,9 @@ Examples:
     parser.add_argument(
         "--language",
         type=str,
-        default="en",
-        choices=["en", "zh"],
-        help="Language code: 'en' or 'zh' (default: en)",
+        default="auto",
+        choices=SUPPORTED_LANGUAGES,
+        help=f"Language: {', '.join(SUPPORTED_LANGUAGES)} (default: auto)",
     )
     parser.add_argument(
         "--break-level",
@@ -405,7 +405,7 @@ def _run_generate(args) -> None:
     """Run the generate command."""
     # Validate parameters
     validate_speed(args.speed)
-    validate_language(args.language)
+    args.language = validate_language(args.language)
 
     # Determine voice mode
     voice_mode = "custom"
