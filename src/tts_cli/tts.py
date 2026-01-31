@@ -468,6 +468,7 @@ def generate_audio(
     speed: int,
     output_path: str,
     speaker_file: Optional[str] = None,
+    speaker_name: Optional[str] = None,
     save_speaker_file: Optional[str] = None,
     break_level: int = 5,  # noqa: ARG001 - kept for API compatibility
     quiet: bool = False,
@@ -480,7 +481,8 @@ def generate_audio(
         text: Input text to convert to speech
         speed: Speech speed (0-9)
         output_path: Output audio file path
-        speaker_file: Optional speaker/voice file to load
+        speaker_file: Optional speaker/voice file to load (.qwen-voice)
+        speaker_name: Optional preset speaker name (e.g. Ryan, Vivian)
         save_speaker_file: Optional file path to save voice
         break_level: Pause strength (unused, kept for compatibility)
         quiet: Suppress progress messages
@@ -512,10 +514,11 @@ def generate_audio(
             if not quiet:
                 print_info(f"Voice saved to: {save_speaker_file}")
     else:
+        preset = speaker_name or "Ryan"
         if not quiet:
-            print_info("Using preset speaker: Ryan")
+            print_info(f"Using preset speaker: {preset}")
         audio, sr = generate_with_custom_voice(
-            chat, text, speaker="Ryan", instruct=instruct
+            chat, text, speaker=preset, instruct=instruct
         )
 
     # Save audio

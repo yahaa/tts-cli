@@ -98,12 +98,12 @@ def check_dependencies(require_whisper: bool = True) -> None:
     Raises:
         ImportError: If required dependencies are missing
     """
-    # ChatTTS check
+    # Qwen-TTS check
     try:
-        import ChatTTS  # noqa: F401
+        import qwen_tts  # noqa: F401
     except ImportError as exc:
         raise ImportError(
-            "ChatTTS not found. Install it with:\n   pip install ChatTTS"
+            "qwen-tts not found. Install it with:\n   pip install qwen-tts"
         ) from exc
 
     if require_whisper:
@@ -127,7 +127,7 @@ def check_dependencies(require_whisper: bool = True) -> None:
 def print_header() -> None:
     """Print CLI header."""
     print("=" * 70)
-    print("ChatTTS Text-to-Speech with Subtitle Generation")
+    print("Qwen3-TTS Text-to-Speech with Subtitle Generation")
     print("=" * 70)
 
 
