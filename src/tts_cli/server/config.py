@@ -17,7 +17,7 @@ class ServerConfig:
     max_text_length: int = 100000
 
     # TTS defaults
-    default_language: str = "en"
+    default_language: str = "auto"
     default_speed: int = 3
     default_break_level: int = 5
     default_max_length: int = 500

@@ -64,7 +64,7 @@ class TTSConfig:
         output_audio: str = "output.wav",
         output_srt: Optional[str] = None,
         speed: int = 3,
-        language: str = "en",
+        language: str = "auto",
         break_level: int = 5,
         speaker: Optional[str] = None,
         save_speaker: Optional[str] = None,
