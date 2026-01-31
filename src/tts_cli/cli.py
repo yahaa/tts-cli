@@ -132,7 +132,6 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--skip-subtitles",
         action="store_true",
-        default=True,
         help="Skip subtitle generation (default: True)",
     )
     parser.add_argument(
@@ -378,7 +377,6 @@ Examples:
     parser.add_argument(
         "--skip-subtitles",
         action="store_true",
-        default=True,
         help="Skip subtitle generation (default: True)",
     )
     parser.add_argument(
@@ -468,7 +466,7 @@ def _run_generate(args) -> None:
         max_batch=args.max_batch,
         no_normalize=args.no_normalize,
         whisper_model=args.whisper_model,
-        skip_subtitles=not args.subtitles if args.subtitles else args.skip_subtitles,
+        skip_subtitles=not args.subtitles,  # Default: skip subtitles unless --subtitles specified
         no_json=args.no_json,
         quiet=args.quiet,
         voice=voice_config,

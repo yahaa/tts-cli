@@ -50,3 +50,4 @@ htmlcov/
 .ruff_cache
 .playwright-mcp
 pkg/
+test_input.txt
