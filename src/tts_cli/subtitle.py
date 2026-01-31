@@ -62,12 +62,23 @@ def generate_subtitles(
     if not quiet:
         print_info("Recognizing audio...")
 
+    # Always use None for language to let Whisper auto-detect
+    # This is more reliable than passing a specific language code
+    whisper_language = None
+
+    # Detect device to avoid FP16 warning on CPU
+    import torch
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    fp16 = torch.cuda.is_available()  # Only use FP16 if GPU is available
+
     # Transcribe audio
     result = model.transcribe(
         audio_path,
-        language=language,
+        language=whisper_language,
         word_timestamps=True,
         verbose=False,
+        fp16=fp16,
     )
 
     if not quiet:

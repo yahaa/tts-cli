@@ -193,24 +193,35 @@ def init_qwen_tts(
         try:
             os.environ["HF_HUB_OFFLINE"] = "1"
             model = Qwen3TTSModel.from_pretrained(model_name, **kwargs)
-        except Exception:
-            _restore_hf_offline(old_hf_offline)
-            if not quiet:
-                print_info("Local cache not found, downloading from HuggingFace...")
-            try:
-                model = Qwen3TTSModel.from_pretrained(model_name, **kwargs)
-            except Exception as e:
-                # If FlashAttention 2 failed, retry without it
-                if use_flash_attn and "flash_attn" in str(e).lower():
+        except Exception as e:
+            # Check if it's a FlashAttention 2 issue first
+            if use_flash_attn and "flash_attn" in str(e).lower():
+                _restore_hf_offline(old_hf_offline)
+                if not quiet:
+                    print_info(
+                        "FlashAttention 2 not available, falling back to standard attention"
+                    )
+                kwargs.pop("attn_implementation", None)
+                kwargs.pop("dtype", None)
+                # Retry offline first without FlashAttention
+                try:
+                    os.environ["HF_HUB_OFFLINE"] = "1"
+                    model = Qwen3TTSModel.from_pretrained(model_name, **kwargs)
+                    _restore_hf_offline(old_hf_offline)
+                except Exception:
+                    # Still failed offline, try online
+                    _restore_hf_offline(old_hf_offline)
                     if not quiet:
                         print_info(
-                            "FlashAttention 2 not available, falling back to standard attention"
+                            "Local cache not found, downloading from HuggingFace..."
                         )
-                    kwargs.pop("attn_implementation", None)
-                    kwargs.pop("dtype", None)
                     model = Qwen3TTSModel.from_pretrained(model_name, **kwargs)
-                else:
-                    raise
+            else:
+                # Not a FlashAttention issue, likely missing cache
+                _restore_hf_offline(old_hf_offline)
+                if not quiet:
+                    print_info("Local cache not found, downloading from HuggingFace...")
+                model = Qwen3TTSModel.from_pretrained(model_name, **kwargs)
         else:
             _restore_hf_offline(old_hf_offline)
 
