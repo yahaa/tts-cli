@@ -1,5 +1,6 @@
 """Main workflow orchestrator for tts-cli."""
 
+import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -134,7 +135,7 @@ def run_tts_with_subtitles(config: TTSConfig) -> None:
         print_header()
         print_info(f"Input text length: {len(text)} characters")
 
-    # 5. Initialize ChatTTS
+    # 5. Initialize Qwen3-TTS
     chat = init_chat_tts(quiet=config.quiet)
 
     # 6. Split and merge text into optimal chunks
@@ -156,17 +157,39 @@ def run_tts_with_subtitles(config: TTSConfig) -> None:
     # 7. Generate audio
     total_steps = 2 if not config.skip_subtitles else 1
 
+    # Determine speaker file vs preset name from voice config
+    speaker_file = None
+    if config.voice and config.voice.voice_prompt_file:
+        # Explicit voice file (.qwen-voice or other file path)
+        speaker_file = config.voice.voice_prompt_file
+    elif config.speaker and (
+        config.speaker.endswith(".qwen-voice")
+        or config.speaker.endswith(".pt")
+        or os.path.exists(config.speaker)
+    ):
+        # Raw speaker arg looks like a file path
+        speaker_file = config.speaker
+    # Otherwise speaker_file stays None, and generate_audio uses preset
+
     if len(text_chunks) == 1:
         # Single chunk - direct generation
         if not config.quiet:
             print_step(1, total_steps, "Generating audio...")
+
+        # Resolve preset speaker name from voice config or raw speaker arg
+        preset_speaker = None
+        if config.voice and config.voice.speaker:
+            preset_speaker = config.voice.speaker
+        elif config.speaker and not speaker_file:
+            preset_speaker = config.speaker
 
         _, duration = generate_audio(
             chat=chat,
             text=text_chunks[0],
             speed=config.speed,
             output_path=config.output_audio,
-            speaker_file=config.speaker,
+            speaker_file=speaker_file,
+            speaker_name=preset_speaker,
             save_speaker_file=config.save_speaker,
             break_level=config.break_level,
             quiet=config.quiet,
@@ -232,7 +255,7 @@ def _generate_audio_multi_chunk(
     This approach avoids short sentence issues and maximizes GPU efficiency.
 
     Args:
-        chat: ChatTTS instance
+        chat: Qwen3-TTS model instance
         text_chunks: List of text chunks (each ~600-800 chars with pause markers)
         config: TTS configuration
         total_steps: Total number of steps for progress display
@@ -264,11 +287,28 @@ def _generate_audio_multi_chunk(
         print_info(f"Auto batch size: {batch_size}")
 
     # Load or create speaker (ensure consistency across chunks)
-    if config.speaker:
-        spk = load_speaker(config.speaker)
+    # Determine speaker file vs preset name
+    speaker_file = None
+    if config.voice and config.voice.voice_prompt_file:
+        speaker_file = config.voice.voice_prompt_file
+    elif config.speaker and (
+        config.speaker.endswith(".qwen-voice")
+        or config.speaker.endswith(".pt")
+        or os.path.exists(config.speaker)
+    ):
+        speaker_file = config.speaker
+
+    if speaker_file:
+        spk = load_speaker(speaker_file)
     else:
-        spk = sample_random_speaker(chat)
-        if config.save_speaker:
+        # Use preset speaker name (string)
+        preset = None
+        if config.voice and config.voice.speaker:
+            preset = config.voice.speaker
+        elif config.speaker:
+            preset = config.speaker
+        spk = preset or sample_random_speaker(chat)
+        if config.save_speaker and not isinstance(spk, str):
             save_speaker(spk, config.save_speaker)
             if not config.quiet:
                 print_info(f"Speaker saved to: {config.save_speaker}")
