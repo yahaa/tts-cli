@@ -36,8 +36,8 @@ class CreateTtsTaskRequest(BaseModel):
     )
     speaker_id: Optional[str] = Field(
         default=None,
-        description="本地说话人音色文件路径 (.pt 格式)",
-        examples=["/path/to/speaker.pt"],
+        description="说话人：可以是预设名称（如 Ryan, Vivian）或音色文件路径（.qwen-voice 格式）",
+        examples=["Ryan", "Vivian", "/path/to/speaker.qwen-voice"],
     )
     max_length: int = Field(
         default=500,
@@ -206,7 +206,7 @@ class HealthResponse(BaseModel):
     """健康检查响应模型"""
 
     status: str = Field(description="服务状态", examples=["healthy"])
-    model_loaded: bool = Field(description="ChatTTS 模型是否已加载", examples=[True])
+    model_loaded: bool = Field(description="Qwen3-TTS 模型是否已加载", examples=[True])
     version: str = Field(description="服务版本号", examples=["0.1.0"])
     mongodb_connected: bool = Field(description="MongoDB 是否已连接", examples=[True])
 

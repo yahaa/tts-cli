@@ -1,4 +1,4 @@
-"""Health check routes."""
+"""Health check routes for Qwen3-TTS server."""
 
 from fastapi import APIRouter
 

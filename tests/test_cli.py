@@ -76,10 +76,10 @@ class TestArgumentParser:
         assert args.language == "zh"
 
     def test_default_language(self):
-        """Default language should be en."""
+        """Default language should be auto."""
         parser = create_argument_parser()
         args = parser.parse_args(["--text", "test"])
-        assert args.language == "en"
+        assert args.language == "auto"
 
     def test_speaker_argument(self):
         """--speaker argument should work."""

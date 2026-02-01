@@ -21,7 +21,9 @@ except ImportError:
         return decorator
 
 
-# Sample rate used by ChatTTS
+# Default sample rate. Qwen3-TTS typically outputs 24kHz audio.
+# If the model returns a different sample rate, callers should use that value
+# instead of this constant (e.g. generate_audio returns sr from the model).
 SAMPLE_RATE = 24000
 
 
@@ -37,7 +39,11 @@ def float_to_int16(audio: np.ndarray) -> np.ndarray:
     Returns:
         Normalized audio as int16 array
     """
-    am = int(math.ceil(float(np.abs(audio).max())) * 32768)
+    max_val = float(np.abs(audio).max())
+    if max_val < 1e-10:
+        # Silent audio — return zeros directly to avoid division by zero
+        return np.zeros(len(audio), dtype=np.int16)
+    am = int(math.ceil(max_val) * 32768)
     am = 32767 * 32768 // am
     return np.multiply(audio, am).astype(np.int16)
 
@@ -137,6 +143,10 @@ def normalize_audio(audio: np.ndarray) -> np.ndarray:
     """
     Normalize int16 audio to maximize dynamic range.
 
+    Re-scales audio so the peak sample uses the full int16 range.
+    This is intentionally a round-trip (int16 → float → int16) to
+    re-maximize dynamic range after operations like concatenation.
+
     Args:
         audio: Audio data as int16 array
 
@@ -144,6 +154,10 @@ def normalize_audio(audio: np.ndarray) -> np.ndarray:
         Normalized audio as int16 array
     """
     if len(audio) == 0:
+        return audio
+
+    # Guard against silent audio
+    if np.abs(audio).max() == 0:
         return audio
 
     # Convert to float, normalize, convert back

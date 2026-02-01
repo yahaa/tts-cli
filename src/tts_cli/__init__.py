@@ -2,7 +2,7 @@
 tts-cli: A local offline text-to-speech CLI tool with subtitle generation.
 
 This package provides a command-line tool for converting text to speech using
-ChatTTS, with optional subtitle generation using Whisper.
+Qwen3-TTS, with optional subtitle generation using Whisper.
 """
 
 __version__ = "0.1.0"
