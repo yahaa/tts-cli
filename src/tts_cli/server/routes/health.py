@@ -19,7 +19,7 @@ router = APIRouter(tags=["health"])
 
 ### 返回信息
 - `status`: 服务状态（healthy）
-- `model_loaded`: ChatTTS 模型是否已加载
+- `model_loaded`: Qwen3-TTS 模型是否已加载
 - `version`: 服务版本号
 - `mongodb_connected`: MongoDB 数据库是否已连接
 

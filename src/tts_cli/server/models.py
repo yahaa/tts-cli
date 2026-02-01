@@ -73,7 +73,7 @@ class CreateTtsTaskRequest(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {
-                    "text": "你好，欢迎使用 tts-cli 服务。这是一个基于 ChatTTS 的文字转语音工具。",
+                    "text": "你好，欢迎使用 tts-cli 服务。这是一个基于 Qwen3-TTS 的文字转语音工具。",
                     "language": "zh",
                     "speed": 3,
                     "skip_subtitles": False,
