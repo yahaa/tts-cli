@@ -139,7 +139,7 @@ def run_tts_with_subtitles(config: TTSConfig) -> None:
     chat = init_chat_tts(quiet=config.quiet)
 
     # 6. Split and merge text into optimal chunks
-    # Qwen-TTS can handle longer chunks than ChatTTS
+    # Qwen-TTS can handle longer chunks
     max_length = config.max_length or 1000
     target_length = int(max_length * 0.75)  # Target 75% of max for flexibility
 

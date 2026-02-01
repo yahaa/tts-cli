@@ -3,7 +3,7 @@
 This module handles text-to-speech generation using Qwen3-TTS,
 with GPU memory management and batch processing for optimal performance.
 
-Includes backward-compatible wrappers for ChatTTS API to maintain existing functionality.
+Includes backward-compatible wrappers for the legacy API interface.
 """
 
 from typing import List, Optional, Tuple
@@ -425,7 +425,7 @@ def generate_batch(
 
 
 # ========================================
-# Backward-Compatible Wrappers for ChatTTS API
+# Backward-Compatible Wrappers (legacy API)
 # ========================================
 
 
@@ -444,7 +444,7 @@ def init_chat_tts(quiet: bool = False):
 
 def sample_random_speaker(chat):
     """
-    Legacy ChatTTS API - returns default preset speaker.
+    Legacy API - returns default preset speaker.
 
     Args:
         chat: Model instance (unused, kept for API compatibility)
@@ -466,11 +466,11 @@ def load_speaker(speaker_file: str):
         Voice prompt for Qwen-TTS
 
     Raises:
-        ValueError: If file is .pt (ChatTTS format, not supported)
+        ValueError: If file is .pt (legacy format, not supported)
     """
     if speaker_file.endswith(".pt"):
         raise ValueError(
-            "ChatTTS speaker files (.pt) are not compatible with Qwen-TTS.\n\n"
+            "Legacy .pt speaker files are not compatible with Qwen-TTS.\n\n"
             "To clone a voice:\n"
             "  tts-cli --mode clone --reference-audio <file.wav> \\\n"
             "          --reference-text '<transcript>' \\\n"

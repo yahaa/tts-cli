@@ -1,7 +1,7 @@
 """Text processing utilities for tts-cli.
 
 This module handles text splitting and normalization for Qwen-TTS.
-Key consideration: Qwen-TTS handles longer texts than ChatTTS but still benefits
+Key consideration: Qwen-TTS handles longer texts well but still benefits
 from intelligent splitting for GPU memory management and audio quality.
 """
 
@@ -10,7 +10,7 @@ import unicodedata
 from typing import List
 
 # Default maximum length for each chunk (characters)
-# Qwen-TTS can handle longer chunks than ChatTTS
+# Qwen-TTS can handle longer chunks
 DEFAULT_MAX_LENGTH = 1000
 
 # Minimum length for the last chunk to avoid quality issues
@@ -26,7 +26,7 @@ def normalize_text_for_tts(text: str) -> str:
     """
     Normalize text for Qwen-TTS.
 
-    Qwen-TTS supports a much wider character set than ChatTTS,
+    Qwen-TTS supports a wide character set,
     so we only do basic Unicode normalization.
 
     Args:
@@ -58,7 +58,7 @@ def split_text_intelligently(
     2. If a paragraph exceeds max_length, split at sentence endings
     3. If the last chunk is too short, merge with previous chunk
 
-    IMPORTANT: ChatTTS produces lower quality audio for long texts.
+    IMPORTANT: Very long texts may produce lower quality audio.
     Default max_length=800 is recommended for best quality.
 
     Args:
@@ -170,7 +170,7 @@ def merge_sentences_to_chunks(
     """
     Merge sentences into larger chunks for more efficient TTS processing.
 
-    Short sentences are merged with adjacent sentences using ChatTTS pause markers.
+    Short sentences are merged with adjacent sentences using pause markers.
     Each chunk aims to be close to target_length but not exceed max_length.
 
     Args:
@@ -231,7 +231,7 @@ def split_and_merge_text(
     """
     Split text into sentences and merge them into optimal chunks.
 
-    This is the recommended function for preparing text for ChatTTS.
+    This is the recommended function for preparing text for TTS generation.
     It ensures chunks are close to target_length for optimal quality
     and includes pause markers between sentences.
 

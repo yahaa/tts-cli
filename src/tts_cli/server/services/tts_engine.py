@@ -38,7 +38,7 @@ class TTSEngine:
         return self._chat is not None
 
     def ensure_loaded(self) -> None:
-        """Lazy load ChatTTS model."""
+        """Lazy load Qwen3-TTS model."""
         if self._chat is None:
             with self._model_lock:
                 if self._chat is None:
