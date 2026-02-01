@@ -5,6 +5,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Query
 
+from ...voice import SUPPORTED_SPEAKERS
 from ..models import (
     CreateTtsTaskRequest,
     CreateTtsTaskResponse,
@@ -47,15 +48,22 @@ async def create_tts_task(request: CreateTtsTaskRequest):
     if task_manager is None:
         raise HTTPException(status_code=500, detail="Server not initialized")
 
-    # Validate speaker file if provided
-    if request.speaker_id and not os.path.exists(request.speaker_id):
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "SPEAKER_NOT_FOUND",
-                "message": f"Speaker file not found: {request.speaker_id}",
-            },
-        )
+    # Validate speaker if provided: accept preset names or existing file paths
+    if request.speaker_id:
+        is_preset = request.speaker_id in SUPPORTED_SPEAKERS
+        is_file = os.path.exists(request.speaker_id)
+        if not is_preset and not is_file:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "SPEAKER_NOT_FOUND",
+                    "message": (
+                        f"Invalid speaker '{request.speaker_id}'. "
+                        f"Use a preset name ({', '.join(SUPPORTED_SPEAKERS)}) "
+                        f"or a valid file path."
+                    ),
+                },
+            )
 
     # Create task
     request_id = f"req_{uuid.uuid4().hex[:12]}"

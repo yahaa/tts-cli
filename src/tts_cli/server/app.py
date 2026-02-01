@@ -52,8 +52,8 @@ def create_app(config: ServerConfig) -> FastAPI:
         files_module.set_task_manager(state["task_manager"])
         files_module.set_output_dir(config.output_dir)
 
-        # Preload ChatTTS model
-        logger.info("Preloading ChatTTS model...")
+        # Preload Qwen3-TTS model
+        logger.info("Preloading Qwen3-TTS model...")
         state["tts_engine"].ensure_loaded()
 
         # Start background worker
@@ -108,7 +108,7 @@ def create_app(config: ServerConfig) -> FastAPI:
         description="""
 ## TTS Server - 文字转语音服务 API
 
-基于 ChatTTS 的异步文字转语音服务，支持中英文语音合成和字幕生成。
+基于 Qwen3-TTS 的异步文字转语音服务，支持中英文语音合成和字幕生成。
 
 ### 功能特性
 

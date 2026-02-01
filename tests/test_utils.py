@@ -63,20 +63,28 @@ class TestValidateSpeed:
 
 
 class TestValidateLanguage:
-    """Tests for validate_language function."""
+    """Tests for validate_language function (returns Qwen3-TTS language names)."""
 
     def test_valid_english(self):
-        """English should be valid."""
-        assert validate_language("en") == "en"
+        """English should map to 'english'."""
+        assert validate_language("en") == "english"
 
     def test_valid_chinese(self):
-        """Chinese should be valid."""
-        assert validate_language("zh") == "zh"
+        """Chinese should map to 'chinese'."""
+        assert validate_language("zh") == "chinese"
+
+    def test_valid_auto(self):
+        """Auto should map to 'auto'."""
+        assert validate_language("auto") == "auto"
+
+    def test_valid_japanese(self):
+        """Japanese should map to 'japanese'."""
+        assert validate_language("ja") == "japanese"
 
     def test_invalid_language(self):
         """Invalid language should raise ValueError."""
-        with pytest.raises(ValueError, match="Language must be 'en' or 'zh'"):
-            validate_language("fr")
+        with pytest.raises(ValueError, match="Language must be one of"):
+            validate_language("xx")
 
 
 class TestReadTextFromFile:

@@ -38,6 +38,20 @@ class TestFloatToInt16:
         result = float_to_int16(audio)
         assert result.dtype == np.int16
 
+    def test_silent_audio(self):
+        """All-zero (silent) audio should return zeros without crashing."""
+        audio = np.zeros(100, dtype=np.float32)
+        result = float_to_int16(audio)
+        assert result.dtype == np.int16
+        assert np.all(result == 0)
+
+    def test_near_zero_audio(self):
+        """Near-zero audio should return zeros without crashing."""
+        audio = np.full(50, 1e-12, dtype=np.float32)
+        result = float_to_int16(audio)
+        assert result.dtype == np.int16
+        assert np.all(result == 0)
+
 
 class TestMergeAudioFiles:
     """Tests for merge_audio_files function."""
@@ -137,3 +151,10 @@ class TestNormalizeAudio:
         audio = np.array([], dtype=np.int16)
         result = normalize_audio(audio)
         assert len(result) == 0
+
+    def test_silent_audio(self):
+        """Silent (all-zero) audio should return zeros without crashing."""
+        audio = np.zeros(100, dtype=np.int16)
+        result = normalize_audio(audio)
+        assert result.dtype == np.int16
+        assert np.all(result == 0)

@@ -1,6 +1,8 @@
 """Task management service with MongoDB storage."""
 
 import logging
+import os
+import shutil
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -120,8 +122,30 @@ class TaskManager:
         )
 
     async def cleanup_old_tasks(self, max_age_hours: int = 24) -> int:
-        """Remove tasks older than max_age_hours."""
+        """Remove tasks older than max_age_hours, including generated files."""
         cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+
+        # First, find tasks to delete so we can clean up their files
+        cursor = self.collection.find(
+            {
+                "finish_time": {"$lt": cutoff},
+                "status": {"$in": ["success", "failed"]},
+            },
+            {"task_id": 1},
+        )
+        task_ids = [doc["task_id"] async for doc in cursor]
+
+        # Delete generated files from disk
+        for task_id in task_ids:
+            task_dir = os.path.join(self.output_dir, "tasks", task_id)
+            if os.path.isdir(task_dir):
+                try:
+                    shutil.rmtree(task_dir)
+                    logger.debug(f"Removed files for task: {task_id}")
+                except OSError as e:
+                    logger.warning(f"Failed to remove files for task {task_id}: {e}")
+
+        # Then delete DB records
         result = await self.collection.delete_many(
             {
                 "finish_time": {"$lt": cutoff},

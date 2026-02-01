@@ -1,4 +1,4 @@
-"""TTS engine singleton wrapper."""
+"""TTS engine singleton wrapper for Qwen3-TTS."""
 
 import logging
 import os
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class TTSEngine:
-    """Singleton wrapper for ChatTTS model."""
+    """Singleton wrapper for Qwen3-TTS model."""
 
     _instance: Optional["TTSEngine"] = None
     _lock = threading.Lock()
@@ -42,9 +42,9 @@ class TTSEngine:
         if self._chat is None:
             with self._model_lock:
                 if self._chat is None:
-                    logger.info("Loading ChatTTS model...")
+                    logger.info("Loading Qwen3-TTS model...")
                     self._chat = init_chat_tts(quiet=True)
-                    logger.info("ChatTTS model loaded")
+                    logger.info("Qwen3-TTS model loaded")
 
     def generate(
         self,
